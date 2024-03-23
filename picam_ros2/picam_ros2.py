@@ -13,6 +13,15 @@ import os
 import subprocess
 import traceback
 
+try:
+    from picamera2 import Picamera2
+    print(c('Picamera2 loaded', 'green'))
+except Exception as e:
+    print(c('Failed to import picamera2', 'red'), e)
+    exit(1)
+
+from .camera import Camera
+
 ROOT = os.path.dirname(__file__)
 
 class CameraNode(Node):
@@ -22,14 +31,41 @@ class CameraNode(Node):
     def __init__(self):
         super().__init__(node_name='picam_ros', use_global_arguments=True)
         
+        self.get_logger().set_level(rclpy.logging.LoggingSeverity.DEBUG)
+        
         self.declare_parameter('topic_prefix', '/picam_')
         self.topic_prefix = self.get_parameter('topic_prefix').get_parameter_value().string_value
-
-         
+        self.cams:list = []
+        
         print(c(f'Hi from CameraNode init, topic prefix is {self.topic_prefix}', 'yellow'))
+        
+        self.picam2 = None
+        try:
+            self.picam2 = Picamera2()
+            cam_infos = self.picam2.global_camera_info()
+            num = len(cam_infos)
+            if not cam_infos or not num:
+                self.get_logger().error('Picamera did\'t find any cameras')
+                return
+            
+            self.get_logger().info(c(f'Picamera found {num} {"cameras" if num > 1 else "camera"}', 'cyan'))
+            for cam_info in cam_infos:
+                cam = Camera(cam_info, self, self.picam2)
+                self.cams.append(cam)
+                asyncio.get_event_loop().create_task(cam.start(self.topic_prefix))
+                
+        except (Exception, AttributeError) as e:
+            print(c('Picamera2 init failed', 'red'))
+            print(e)
+    
+    async def run(self):
+        self.running = True
+        while self.running:
+            await asyncio.sleep(0.1)
     
     async def shutdown_cleanup(self):
-        pass
+        for cam in self.cams:
+            await cam.stop()
 
 
 async def main_async():
@@ -45,22 +81,19 @@ async def main_async():
         await asyncio.sleep(1.0) # needs a bit for the udev rules to take effect and picam init sucessfuly
 
     try:
-        from picamera2 import Picamera2
-        print(c('Picamera2 loaded', 'green'))
-    except Exception as e:
-        print(c('Failed to import picamera2', 'red'), e)
-        pass
-    
-    try:
         cam_node = CameraNode()
+        stream_task = cam_node.run()
+        await asyncio.wait([ stream_task ], return_when=asyncio.ALL_COMPLETED)
     except Exception as e:
         print(c('Exception in main_async()', 'red'))
         traceback.print_exc(e)
+        cam_node.running = False
     except (asyncio.CancelledError, KeyboardInterrupt):
         print(c('Shutting down main_async', 'red'))
+        cam_node.running = False
+        pass
         
     print('SHUTTING DOWN')
-    
     await cam_node.shutdown_cleanup()
     
     try:
@@ -78,7 +111,10 @@ class MyPolicy(asyncio.DefaultEventLoopPolicy):
 
 def main():
     asyncio.set_event_loop_policy(MyPolicy())
-    asyncio.run(main_async())
+    try:
+        asyncio.run(main_async())
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        pass
 
 
 if __name__ == '__main__':
