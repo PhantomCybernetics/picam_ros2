@@ -106,11 +106,11 @@ WORKDIR $ROS_WS
 #     rosdep install -i --from-path src/phntm_interfaces --rosdistro $ROS_DISTRO -y && \
 #     colcon build --symlink-install --packages-select phntm_interfaces
 
-# RUN git clone https://github.com/PhantomCybernetics/phntm_bridge.git /ros2_ws/src/phntm_bridge
-# RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-#     . /ros2_ws/install/setup.sh && \
-#     rosdep install -i --from-path src/phntm_bridge --rosdistro $ROS_DISTRO -y && \
-#    colcon build --symlink-install --packages-select phntm_bridge
+RUN git clone https://github.com/PhantomCybernetics/picam_ros2.git /ros2_ws/src/picam_ros2
+RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
+    . /ros2_ws/install/setup.sh && \
+    rosdep install -i --from-path src/picam_ros2 --rosdistro $ROS_DISTRO -y && \
+    colcon build --symlink-install --packages-select picam_ros2
 
 # pimp up prompt with hostame and color
 RUN echo "PS1='\${debian_chroot:+(\$debian_chroot)}\\[\\033[01;35m\\]\\u@\\h\\[\\033[00m\\] \\[\\033[01;34m\\]\\w\\[\\033[00m\\] 👁️ '"  >> /root/.bashrc
