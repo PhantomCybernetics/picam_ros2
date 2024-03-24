@@ -43,15 +43,6 @@ class PacketsOutput(FileOutput):
         # self.aiortc_encoder:aiortcH264Encoder() = aiortcH264Encoder()
 
     def outputframe(self, frame_bytes, keyframe=True, timestamp=None):
-        """Outputs frame from encoder
-
-        :param frame: Frame
-        :type frame: bytes
-        :param keyframe: Whether frame is a keyframe, defaults to True
-        :type keyframe: bool, optional
-        :param timestamp: Timestamp of frame
-        :type timestamp: int
-        """
 
         self.num_received += 1
 
@@ -87,14 +78,14 @@ class PacketsOutput(FileOutput):
         self.last_frame = timestamp
         
         msg = FFMPEGPacket()
-        time_nanosec:int = time.time_ns()
-        msg.header.stamp.sec = math.floor(time_nanosec / 1000000000)
-        msg.header.stamp.nanosec = time_nanosec - (msg.header.stamp.sec *1000000000)
+        # time_nanosec:int = time.time_ns()
+        msg.header.stamp.sec = math.floor(timestamp / 1000000000)
+        msg.header.stamp.nanosec = timestamp % 1000000000  # Ensure nanosec is within the valid range
         msg.width = self.enc.width
         msg.height = self.enc.height
         msg.encoding = 'h.264'
-        msg.pts = timestamp #ns # 'uint64',
-        msg.flags = packet.is_keyframe # 'uint8',
+        msg.pts = timestamp # ns # 'uint64',
+        msg.flags = 1 if keyframe else 0 # 'uint8',
         msg.is_bigendian = False
         msg.data = frame_bytes
         

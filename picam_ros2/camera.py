@@ -13,22 +13,23 @@ import libcamera
 from .packet_output import PacketsOutput
 
 class Camera():
-    def __init__(self, cam_info:dict, node:Node, picam2:Picamera2):
+    def __init__(self, cam_info:dict, node:Node, picam2:Picamera2, cofig:dict, log_message_every_sec:float=5.0):
+        
+        node.get_logger().info(str(cam_info))
+        node.get_logger().info(c(f'Setting up cam {cam_info["Model"]} at location {cam_info["Location"]}; id={cam_info["Id"]}, config={str(cofig)}', 'green'))
+        
         self.cam_info = cam_info
         self.node = node
         self.picam2 = picam2
 
-        self.hflip = False
-        self.vflip = False
-        self.bitrate = 5000000
-        self.framerate = 30
-        self.log_message_every_sec = 5.0
-
-        node.get_logger().info(str(cam_info))
-        node.get_logger().info(c(f'Setting up cam {cam_info["Model"]} at location {cam_info["Location"]}; id={cam_info["Id"]}', 'green'))
+        self.hflip = cofig['hflip']
+        self.vflip = cofig['vflip']
+        self.bitrate = cofig['bitrate']
+        self.framerate = cofig['framerate']
+        self.log_message_every_sec = log_message_every_sec
     
     async def start(self, topic_prefix):
-        self.topic = topic_prefix + self.cam_info["Model"]
+        self.topic = topic_prefix + str(self.cam_info["Location"]) + '/' + self.cam_info["Model"]
         
         qos = QoSProfile(history=QoSHistoryPolicy.KEEP_LAST, \
                         depth=1, \

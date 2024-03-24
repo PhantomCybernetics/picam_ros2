@@ -35,6 +35,23 @@ class CameraNode(Node):
         
         self.declare_parameter('topic_prefix', '/picam_')
         self.topic_prefix = self.get_parameter('topic_prefix').get_parameter_value().string_value
+        
+        self.declare_parameter('log_message_every_sec', 5.0)
+        self.log_message_every_sec = self.get_parameter('log_message_every_sec').get_parameter_value().double_value
+        
+        self.camera_configs = {}
+        for location in range(1, 5): # configs for individual cameras (i = Location, 1-4)
+            self.declare_parameter(f'/camera_{location}.hflip', False)
+            self.declare_parameter(f'/camera_{location}.vflip', False)
+            self.declare_parameter(f'/camera_{location}.bitrate', 5000000)
+            self.declare_parameter(f'/camera_{location}.framerate', 30)
+            self.camera_configs[str(location)] = {
+                'hflip': self.get_parameter(f'/camera_{location}.hflip').get_parameter_value().bool_value,
+                'vflip': self.get_parameter(f'/camera_{location}.vflip').get_parameter_value().bool_value,
+                'bitrate': self.get_parameter(f'/camera_{location}.bitrate').get_parameter_value().integer_value,
+                'framerate': self.get_parameter(f'/camera_{location}.framerate').get_parameter_value().integer_value
+            }
+        
         self.cams:list = []
         
         print(c(f'Hi from CameraNode init, topic prefix is {self.topic_prefix}', 'yellow'))
@@ -50,7 +67,7 @@ class CameraNode(Node):
             
             self.get_logger().info(c(f'Picamera found {num} {"cameras" if num > 1 else "camera"}', 'cyan'))
             for cam_info in cam_infos:
-                cam = Camera(cam_info, self, self.picam2)
+                cam = Camera(cam_info, self, self.picam2, self.camera_configs[str(cam_info['Location'])], self.log_message_every_sec)
                 self.cams.append(cam)
                 asyncio.get_event_loop().create_task(cam.start(self.topic_prefix))
                 
