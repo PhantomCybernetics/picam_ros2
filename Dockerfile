@@ -108,7 +108,6 @@ WORKDIR $ROS_WS
 
 RUN git clone https://github.com/PhantomCybernetics/picam_ros2.git /ros2_ws/src/picam_ros2
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-    . /ros2_ws/install/setup.sh && \
     rosdep install -i --from-path src/picam_ros2 --rosdistro $ROS_DISTRO -y && \
     colcon build --symlink-install --packages-select picam_ros2
 
