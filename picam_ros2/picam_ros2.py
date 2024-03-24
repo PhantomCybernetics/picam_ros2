@@ -74,6 +74,9 @@ class CameraNode(Node):
         except (Exception, AttributeError) as e:
             print(c('Picamera2 init failed', 'red'))
             print(e)
+            if os.path.exists('/ros2_ws/phntm_devices_initialized'):
+                os.remove('/ros2_ws/phntm_devices_initialized') #force udev reload on next start
+            exit(1)
     
     async def run(self):
         self.running = True
