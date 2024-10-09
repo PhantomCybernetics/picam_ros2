@@ -27,19 +27,22 @@ class Camera():
         self.bitrate = cofig['bitrate']
         self.framerate = cofig['framerate']
         self.log_message_every_sec = log_message_every_sec
-    
+
+        self.config = cofig
+        
     async def start(self, topic_prefix):
         self.topic = topic_prefix + str(self.cam_info["Location"]) + '/' + self.cam_info["Model"]
         
-        qos = QoSProfile(history=QoSHistoryPolicy.KEEP_LAST, \
-                        depth=1, \
-                        reliability=QoSReliabilityPolicy.BEST_EFFORT \
-                            )
+        qos = QoSProfile(history=self.config['history'], \
+                        depth=self.config['depth'], \
+                        reliability=self.config['reliability'], \
+                        durability=self.config['durability'] \
+                        )
         self.pub = self.node.create_publisher(FFMPEGPacket, self.topic, qos)
         if self.pub == None:
             self.node.get_logger().error(f'Failed to create publisher for cam {self.cam_info["Model"]} topic {self.topic}')
             
-        self.node.get_logger().info(c(f'Created publisher for cam {self.cam_info["Model"]} at {self.topic}', 'green'))
+        self.node.get_logger().info(c(f'Created publisher for cam {self.cam_info["Model"]} at {self.topic}, qos={qos}', 'green'))
     
         transform = libcamera.Transform(hflip=1 if self.hflip else 0, vflip=1 if self.vflip else 0)
         video_config = self.picam2.create_video_configuration(queue=False, transform=transform)

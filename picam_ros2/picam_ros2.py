@@ -41,11 +41,21 @@ class CameraNode(Node):
         
         self.camera_configs = {}
         for location in range(1, 5): # configs for individual cameras (i = Location, 1-4)
+            self.declare_parameter(f'/camera_{location}.reliability', 1) # reliable
+            self.declare_parameter(f'/camera_{location}.durability', 2) # volatile
+            self.declare_parameter(f'/camera_{location}.history', 1) # keep last
+            self.declare_parameter(f'/camera_{location}.depth', 1)
+
             self.declare_parameter(f'/camera_{location}.hflip', False)
             self.declare_parameter(f'/camera_{location}.vflip', False)
             self.declare_parameter(f'/camera_{location}.bitrate', 5000000)
             self.declare_parameter(f'/camera_{location}.framerate', 30)
             self.camera_configs[str(location)] = {
+                'reliability': self.get_parameter(f'/camera_{location}.reliability').get_parameter_value().integer_value,
+                'durability': self.get_parameter(f'/camera_{location}.durability').get_parameter_value().integer_value,
+                'history': self.get_parameter(f'/camera_{location}.history').get_parameter_value().integer_value,
+                'depth': self.get_parameter(f'/camera_{location}.depth').get_parameter_value().integer_value,
+
                 'hflip': self.get_parameter(f'/camera_{location}.hflip').get_parameter_value().bool_value,
                 'vflip': self.get_parameter(f'/camera_{location}.vflip').get_parameter_value().bool_value,
                 'bitrate': self.get_parameter(f'/camera_{location}.bitrate').get_parameter_value().integer_value,
