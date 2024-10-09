@@ -92,6 +92,7 @@ class CameraNode(Node):
         self.running = True
         while self.running:
             await asyncio.sleep(0.1)
+            rclpy.spin_once(self, timeout_sec=0.1) # allow services processing
     
     async def shutdown_cleanup(self):
         for cam in self.cams:
