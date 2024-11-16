@@ -99,22 +99,14 @@ RUN echo 'test -f "/ros2_ws/install/setup.bash" && source "/ros2_ws/install/setu
 
 WORKDIR $ROS_WS
 
-# clone and install phntm interfaces and bridge
-# RUN git clone https://github.com/PhantomCybernetics/phntm_interfaces.git /ros2_ws/src/phntm_interfaces
-# RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-#     rosdep update --rosdistro $ROS_DISTRO && \
-#     rosdep install -i --from-path src/phntm_interfaces --rosdistro $ROS_DISTRO -y && \
-#     colcon build --symlink-install --packages-select phntm_interfaces
-
-RUN git clone https://github.com/PhantomCybernetics/picam_ros2.git /ros2_ws/src/picam_ros2
+# install picam_ros2
+COPY ./ $ROS_WS/src/picam_ros2
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     rosdep install -i --from-path src/picam_ros2 --rosdistro $ROS_DISTRO -y && \
     colcon build --symlink-install --packages-select picam_ros2
 
 # pimp up prompt with hostame and color
 RUN echo "PS1='\${debian_chroot:+(\$debian_chroot)}\\[\\033[01;35m\\]\\u@\\h\\[\\033[00m\\] \\[\\033[01;34m\\]\\w\\[\\033[00m\\] 👁️ '"  >> /root/.bashrc
-
-# WORKDIR $ROS_WS/src/phntm_bridge
 
 ENTRYPOINT ["/ros_entrypoint.sh"]
 CMD [ "bash" ]

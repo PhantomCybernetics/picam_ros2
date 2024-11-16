@@ -1,13 +1,31 @@
-# Picamera ROS2 Node
+# PiCamera ROS2 Node
 
-Streams hw-encoded h.264 frames as a ROS2 topic
+Streams hw-encoded H.264 frames as ROS2 topics
 
-### Build 
+## Install
 
-`docker build -f picam_ros2/Dockerfile -t "phntm/picam-ros:humble" .`
+### Install Docker, Docker Build & Docker Compose
 
-### Config example
-`yaml
+E.g. on Debian/Ubuntu follow [these instructions](https://docs.docker.com/engine/install/debian/). Then add the current user to the docker group:
+```bash
+sudo usermod -aG docker ${USER}
+# log out & back in
+```
+
+### Build the Docker Image
+```bash
+cd ~
+git clone git@github.com:PhantomCybernetics/picam_ros2.git picam_ros2
+cd picam_ros2
+ROS_DISTRO=humble; \
+docker build -f Dockerfile -t phntm/picam-ros:$ROS_DISTRO \
+  --build-arg ROS_DISTRO=$ROS_DISTRO \
+  .
+```
+
+### Configure the Node
+The following is an example config file (~/picam_ros.yaml)
+```yaml
 /**:
   ros__parameters:
     topic_prefix: '/picam_h264/camera_'
@@ -17,9 +35,10 @@ Streams hw-encoded h.264 frames as a ROS2 topic
       vflip: False
       bitrate: 5000000
       framerate: 30
-`
-### compose.yaml:
-`yaml
+```
+
+### Add Service to your compose.yaml:
+```yaml
 services:
   picam_ros:
     image: phntm/picam-ros:humble
@@ -28,14 +47,18 @@ services:
     restart: unless-stopped
     privileged: true
     network_mode: host
+    ipc: host # phntm bridge needs this to see other local containers
     shm_size: 200m # more room for camera frames
     volumes:
       - ~/picam_ros.yaml:/ros2_ws/picam_ros_params.yaml # config goes here
-      - ~/picam_ros2:/ros2_ws/src/picam_ros2
       - /tmp:/tmp
     devices:
       - /dev:/dev # cameras need this
     command:
       ros2 launch picam_ros2 picam_ros2_launch.py
-      #/bin/sh -c "while sleep 1000; do :; done"
-`
+```
+
+### Launch
+```bash
+docker compose up picam_ros
+```
