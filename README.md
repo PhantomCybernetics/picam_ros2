@@ -46,7 +46,7 @@ services:
     hostname: picam-ros.local
     restart: unless-stopped
     privileged: true
-    # cpuset: '3' # consider restrincting to a single CPU core
+    # cpuset: '3' # consider restricting to a single CPU core
     network_mode: host
     ipc: host # phntm bridge needs this to see other local containers
     shm_size: 200m # more room for camera frames
