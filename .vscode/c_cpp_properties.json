@@ -4,7 +4,9 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
+                "${workspaceFolder}/include/picam_ros2/**",
                 "/opt/ros/humble/include/**",
+                "/opt/ros/humble/include/ffmpeg_image_transport_msgs/**",
                 "/usr/local/include/libcamera/"
             ],
             "defines": [],
