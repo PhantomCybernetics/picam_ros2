@@ -95,8 +95,8 @@ CameraInterface::CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr
 
 bool CameraInterface::initializeEncoder() {
     // Initialize encoder
-    this->codec = avcodec_find_encoder(AV_CODEC_ID_H264); //CPU
-    //this->codec = avcodec_find_encoder_by_name("h264_v4l2m2m"); // hw encoder on bcm2835
+    // this->codec = avcodec_find_encoder(AV_CODEC_ID_H264); //CPU
+    this->codec = avcodec_find_encoder_by_name("h264_v4l2m2m"); // hw encoder on bcm2835
     if (!this->codec){
         std::cerr << "Codec with specified id not found" << std::endl;
         return false;
@@ -116,8 +116,10 @@ bool CameraInterface::initializeEncoder() {
     /// Frames per second
     this->codec_context->time_base.num = 1;
     this->codec_context->time_base.den = this->fps;
-    this->codec_context->framerate.num = 1;
-    this->codec_context->framerate.den = this->fps;
+    this->codec_context->framerate.num = this->fps;
+    this->codec_context->framerate.den = 1;
+
+    this->codec_context->bit_rate = 4000000;
 
     /// Only YUV420P for H264|5
     this->codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
