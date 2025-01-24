@@ -18,8 +18,12 @@ using namespace std::chrono_literals;
 
 PicamROS2::PicamROS2() : Node("picam_ros2"), count_(0)
 {
-  publisher_ = this->create_publisher<std_msgs::msg::String>("topic", 10);
-  timer_ = this->create_wall_timer(1000ms, std::bind(&PicamROS2::timer_callback, this));
+    this->declare_parameter("topic_prefix", "/picam_h264/camera_");
+    this->declare_parameter("log_message_every_sec", 5.0);
+    this->declare_parameter("log_scroll", true);
+
+    //   publisher_ = this->create_publisher<std_msgs::msg::String>("topic", 10);
+    //   timer_ = this->create_wall_timer(1000ms, std::bind(&PicamROS2::timer_callback, this));
 }
 
 std::future<int> PicamROS2::async_function(int x) {
@@ -43,7 +47,7 @@ void reloadUdevRules() {
         std::cout << "\033[35mFirst run, initializing udev rules for /dev\033[0m" << std::endl;        
         std::system("/ros2_ws/src/picam_ros2/scripts/reload-devices.sh");
         std::cout << "\033[35mUdev rules initialized\033[0m" << std::endl;
-        std::this_thread::sleep_for(std::chrono::seconds(1));  // needs a bit for the udev rules to take effect and picam init sucessfuly
+        std::this_thread::sleep_for(std::chrono::seconds(2));  // needs a bit for the udev rules to take effect and picam init sucessfuly
     }
 }
 

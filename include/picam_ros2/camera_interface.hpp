@@ -30,6 +30,8 @@ const std::string CYAN = "\033[36m";
 const std::string WHITE = "\033[37m2";
 const std::string CLR = "\033[0m";
 
+const int NS_TO_SEC = 1000000000;
+
 using namespace libcamera;
 
 class CameraInterface {
@@ -53,8 +55,19 @@ class CameraInterface {
         int frameIdx = 0;
         int bytes_per_pixel;
         rclcpp::Publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>::SharedPtr publisher;
-        
+        int lines_printed = 0;
+        bool verbose = true;
+        bool log_scrolls = true;
+        int location;
+        int rotation;
+        std::string model;
+
+        bool hw_encoder;
+        int bit_rate;
+        std::string frame_id;
+
         StreamConfiguration streamConfig;
         bool initializeEncoder();
         void requestComplete(Request *request);
+        int resetEncoder(const char* device_path);
 };

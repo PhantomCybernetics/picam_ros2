@@ -13,6 +13,7 @@ find_package(ffmpeg_image_transport_msgs REQUIRED)
 
 find_library(AVCODEC_LIBRARY avcodec)
 find_library(AVUTIL_LIBRARY avutil)
+find_library(FMT_LIBRARY fmt)
 
 pkg_check_modules(LIBCAMERA REQUIRED libcamera)
 
@@ -29,6 +30,7 @@ target_link_libraries(picam
   ${LIBCAMERA_LIBRARIES}
   ${AVCODEC_LIBRARY}
   ${AVUTIL_LIBRARY}
+  ${FMT_LIBRARY}
 )
 
 install(TARGETS

@@ -8,14 +8,22 @@
 
 #include <sys/mman.h>
 #include <unistd.h>
+#include <fmt/core.h>
 
+#include "libcamera/property_ids.h"
 #include "picam_ros2/picam_ros2.hpp"
 #include "picam_ros2/camera_interface.hpp"
 
 #include "rclcpp/rclcpp.hpp"
+#include "rclcpp/qos.hpp"
 #include "std_msgs/msg/header.hpp"
 #include "builtin_interfaces/msg/time.hpp"
 #include "ffmpeg_image_transport_msgs/msg/ffmpeg_packet.hpp"
+
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/ioctl.h>
+#include <linux/videodev2.h>
 
 extern "C" {
     #include <libavcodec/avcodec.h>
@@ -28,35 +36,62 @@ extern "C" {
 using namespace libcamera;
 
 CameraInterface::CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr<PicamROS2> node) {
-    std::cout << "Initiating " << camera->id() << std::endl; 
+
+    // this->resetEncoder("/dev/video11");
+
+    std::cout << GREEN << "Initiating " << camera->id() << CLR << std::endl; 
+
     this->camera = camera;
     this->node = node;
 
-    this->publisher = this->node->create_publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>("/picam_test_c", 1);
-
-    if (!this->initializeEncoder()) {
-        std::cerr << "Error initializing encoder" << std::endl; 
-        return;
-    }
-
-    if(avcodec_open2(this->codec_context, this->codec, nullptr) < 0){
-        std::cerr << "Could not open codec" << std::endl;
-        return;
-    }
-
+    // inspect camera
     this->camera->acquire();
+    const ControlList &props = camera->properties();
+    if (props.contains(properties::Location.id())) {
+        this->location = props.get(properties::Location).value();
+    }
+    if (props.contains(properties::Model.id())) {
+        this->model = props.get(properties::Model)->c_str();
+    }
+    if (props.contains(properties::Rotation.id())) {
+        this->rotation = props.get(properties::Rotation).value();
+    }  
 
+    // declare & read configs
+    std::string config_prefix = fmt::format("/camera_{}.", this->location);
+    
+    this->node->declare_parameter(config_prefix + "hflip", false);
+    this->node->declare_parameter(config_prefix + "vflip", false);
+
+    this->node->declare_parameter(config_prefix + "hw_encoder", true);
+    this->hw_encoder = this->node->get_parameter(config_prefix + "hw_encoder").as_bool();
+
+    this->node->declare_parameter(config_prefix + "bitrate", 4000000);
+    this->bit_rate = this->node->get_parameter(config_prefix + "bitrate").as_int();
+
+    this->node->declare_parameter(config_prefix + "framerate", 30);
+    this->fps = this->node->get_parameter(config_prefix + "framerate").as_int();
+
+    this->node->declare_parameter(config_prefix + "frame_id", "picam");
+    this->frame_id = this->node->get_parameter(config_prefix + "frame_id").as_string();
+
+    this->log_scrolls = this->node->get_parameter("log_scroll").as_bool();
+    
+    // configure camera
     std::unique_ptr<CameraConfiguration> config = this->camera->generateConfiguration( { StreamRole::VideoRecording } );
     config->validate();
     
     this->streamConfig = config->at(0);
+    std::cout << YELLOW << "Camera model: " << this->model << " Location: " << this->location << " Rotation: " << this->rotation << CLR << std::endl; 
+    std::cout << YELLOW << "Camera orinetation: " << config->orientation << CLR << std::endl; 
     std::cout << YELLOW << "Stream config: " << this->streamConfig.toString() << CLR << std::endl; 
     std::cout << YELLOW << "Stride: " << this->streamConfig.stride << CLR << std::endl; 
+    std::cout << YELLOW << "Bit rate: " << this->bit_rate << CLR << std::endl; 
     this->camera->configure(config.get());
 
     FrameBufferAllocator *allocator = new FrameBufferAllocator(this->camera);
 
-    std::cout << "Allocating" << std::endl;
+    std::cout << "Allocating..." << std::endl;
     for (StreamConfiguration &cfg : *config) {
         auto stream = cfg.stream();
         int ret = allocator->allocate(stream);
@@ -88,15 +123,42 @@ CameraInterface::CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr
     }
 
     this->camera->requestCompleted.connect(this, &CameraInterface::requestComplete);
-    camera->start();
+    this->camera->start();
+
+    // init frame producer
+    std::string topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}", this->location, this->model);
+    std::cout << "Creatinng publisher for " << topic << std::endl;
+    auto qos = rclcpp::QoS(1);
+    this->publisher = this->node->create_publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>(topic, qos);
+
+    // init encoder
+    if (!this->initializeEncoder()) {
+        std::cerr << "Error initializing encoder" << std::endl; 
+        return;
+    }
+    
+    if(avcodec_open2(this->codec_context, this->codec, nullptr) < 0){
+        std::cerr << "Could not open codec" << std::endl;
+        return;
+    }
+
+    if (this->hw_encoder) { // wait a bit to allow encoder init
+        std::this_thread::sleep_for(std::chrono::seconds(2));
+    }
+
     for (std::unique_ptr<Request> &request : this->requests)
-        camera->queueRequest(request.get());
+        this->camera->queueRequest(request.get());
 }
 
 bool CameraInterface::initializeEncoder() {
     // Initialize encoder
-    // this->codec = avcodec_find_encoder(AV_CODEC_ID_H264); //CPU
-    this->codec = avcodec_find_encoder_by_name("h264_v4l2m2m"); // hw encoder on bcm2835
+    if (this->hw_encoder) {
+        std::cout << GREEN << "Using HW encoder" << CLR << std::endl;
+        this->codec = avcodec_find_encoder_by_name("h264_v4l2m2m"); // hw encoder on bcm2835
+    } else {
+        std::cout << GREEN << "Using CPU encoder" << CLR << std::endl;
+        this->codec = avcodec_find_encoder(AV_CODEC_ID_H264); //CPU
+    }
     if (!this->codec){
         std::cerr << "Codec with specified id not found" << std::endl;
         return false;
@@ -109,7 +171,7 @@ bool CameraInterface::initializeEncoder() {
 
     assert(this->width % 32 == 0 && "Width not aligned to 32");
 
-    this->codec_context->profile = FF_PROFILE_H264_BASELINE;
+    this->codec_context->profile = FF_PROFILE_H264_CONSTRAINED_BASELINE;
     this->codec_context->height = this->height;
     this->codec_context->width = this->width;
 
@@ -119,7 +181,7 @@ bool CameraInterface::initializeEncoder() {
     this->codec_context->framerate.num = this->fps;
     this->codec_context->framerate.den = 1;
 
-    this->codec_context->bit_rate = 4000000;
+    this->codec_context->bit_rate = this->bit_rate;
 
     /// Only YUV420P for H264|5
     this->codec_context->pix_fmt = AV_PIX_FMT_YUV420P;
@@ -134,7 +196,7 @@ bool CameraInterface::initializeEncoder() {
 
     /// Can be used by a P-frame(predictive, partial frame) to help define a future frame in a compressed video.
     /// [use 3–5 ref per P]
-    this->codec_context->refs = 3;
+    this->codec_context->refs = 0;
 
     /// Compression efficiency (slower -> better quality + higher cpu%)
     /// [ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow]
@@ -144,6 +206,8 @@ bool CameraInterface::initializeEncoder() {
     /// Compression rate (lower -> higher compression) compress to lower size, makes decoded image more noisy
     /// Range: [0; 51], sane range: [18; 26]. I used 35 as good compression/quality compromise. This option also critical for realtime encoding
     av_opt_set(this->codec_context->priv_data, "crf", "35", 0);
+
+    av_opt_set(codec_context->priv_data, "forced-idr", "1", 0);
 
     /// Change settings based upon the specifics of input
     /// [psnr, ssim, grain, zerolatency, fastdecode, animation]
@@ -162,15 +226,10 @@ bool CameraInterface::initializeEncoder() {
     return true;
 }
 
-builtin_interfaces::msg::Time get_current_stamp(uint64_t timestamp_ns) {
-    // rclcpp::Time now = node->get_clock()->now();
-    
+void get_current_stamp(builtin_interfaces::msg::Time *stamp, uint64_t timestamp_ns) {
     // Split into seconds and nanoseconds
-    builtin_interfaces::msg::Time stamp;
-    stamp.sec = static_cast<int32_t>(timestamp_ns / 1000000000);
-    stamp.nanosec = static_cast<uint32_t>(timestamp_ns % 1000000000);;
-    
-    return stamp;
+    stamp->sec = static_cast<int32_t>(timestamp_ns / NS_TO_SEC);
+    stamp->nanosec = static_cast<uint32_t>(timestamp_ns % NS_TO_SEC);;
 }
 
 void CameraInterface::requestComplete(Request *request) {
@@ -221,15 +280,28 @@ void CameraInterface::requestComplete(Request *request) {
             munmap(data, static_cast<size_t>(reinterpret_cast<uintptr_t>(opaque)));
         };
 
-        std::cout << std::setw(6) << std::setfill('0') << metadata.sequence << ": ";
+        if (this->verbose) {
+            if (!this->log_scrolls && this->lines_printed > 0) {
+                for (int i = 0; i < this->lines_printed; i++) {
+                    std::cout << std::string(this->lines_printed, '\033') << "[A\033[K";
+                }
+            }
+            this->lines_printed = 0;
+        }
+
+        if (this->verbose)
+            std::cout << std::setw(6) << std::setfill('0') << metadata.sequence << ": ";
+
         for (size_t i = 0; i < planes.size(); ++i) {
 
             // Map the memory
-            std::cout << "plane#" << i <<" ";
-            if (i == 0)
-                std::cout << "fd=" << planes[i].fd.get() << "; ";
-            std::cout << planes[i].offset << "+" << planes[i].length << " ";
-
+            if (this->verbose) {
+                std::cout << "plane#" << i <<" ";
+                if (i == 0)
+                    std::cout << "fd=" << planes[i].fd.get() << "; ";
+                std::cout << planes[i].offset << "+" << planes[i].length << " ";
+            }
+            
             frame->buf[i] = av_buffer_create(
                 static_cast<uint8_t*>(base)+planes[i].offset,
                 planes[i].length,
@@ -242,11 +314,16 @@ void CameraInterface::requestComplete(Request *request) {
             frame->data[i] = frame->buf[i]->data;
             frame->linesize[i] = (i == 0) ? this->streamConfig.stride : this->streamConfig.stride / 2;
 
-            std::cout << "|" << frame->linesize[i] << "|";
-            if (i < planes.size()-1)
-                std::cout << "; ";
+            if (this->verbose) {
+                std::cout << "|" << frame->linesize[i] << "|";
+                if (i < planes.size()-1)
+                    std::cout << "; ";
+            }
         }
-        std::cout << std::endl;
+        if (this->verbose) {
+            std::cout << std::endl;
+            this->lines_printed++;
+        }
 
         /// Set frame index in range: [1, fps]
         frame->pts = this->frameIdx;
@@ -259,81 +336,111 @@ void CameraInterface::requestComplete(Request *request) {
         }
         // std::cout << "Sending..." << std::endl;
 
+        bool frame_ok = false;
         switch (avcodec_send_frame(this->codec_context, frame)){
             case 0:
+                frame_ok = true;
                 this->frameIdx = (this->frameIdx % this->codec_context->framerate.num) + 1;
                 break;
             case AVERROR(EAGAIN):
-                std::cerr << "Error sending frame to encoder: AVERROR(EAGAIN)" << std::endl;
+                std::cerr << RED << "Error sending frame to encoder: AVERROR(EAGAIN)" << CLR << std::endl;
+                this->lines_printed = -1;
                 break;
             case AVERROR_EOF:
-                std::cerr << "Error sending frame to encoder: AVERROR_EOF" << std::endl;
-                return;
+                std::cerr << RED << "Error sending frame to encoder: AVERROR_EOF" << CLR << std::endl;
+                this->lines_printed = -1;
+                break;
             case AVERROR(EINVAL):
-                std::cerr << "Error sending frame to encoder: AVERROR(EINVAL)" << std::endl;
-                return;
+                std::cerr << RED << "Error sending frame to encoder: AVERROR(EINVAL)" << CLR << std::endl;
+                this->lines_printed = -1;
+                break;
             case AVERROR(ENOMEM):
-                std::cerr << "Error sending frame to encoder: AVERROR(ENOMEM)" << std::endl;
-                return;
+                std::cerr << RED << "Error sending frame to encoder: AVERROR(ENOMEM)" << CLR << std::endl;
+                this->lines_printed = -1;
+                break;
             default:
-                std::cerr << "Error sending frame to encoder: Other error" << std::endl;
-                return;
+                std::cerr << RED << "Error sending frame to encoder: Other error" << CLR << std::endl;
+                this->lines_printed = -1;
+                break;
         }
 
+        av_frame_unref(frame);
         av_frame_free(&frame);
+
+        if (!frame_ok) {
+            continue;
+        }
 
         AVPacket *packet = av_packet_alloc();
         if (packet == NULL) {
-            std::cerr << "Error making packet" << std::endl;
-            return;
+            std::cerr << RED << "Error making packet" << CLR << std::endl;
+            this->lines_printed = -1;
+            continue;
         }
 
+        bool packet_ok = false;
         switch (avcodec_receive_packet(this->codec_context, packet)) {
             case 0:
                 /// use packet, copy/send it's data, or whatever
-                std::cout << (packet->flags == 1 ? MAGENTA : YELLOW);
-                
-                std::cout << "PACKET " << packet->size
-                          << " / " << packet->buf->size
-                          << " pts=" << packet->pts
-                          << " flags=" << packet->flags;
-                std::cout << CLR;
-                std::cout << std::endl;
-                
+                packet_ok = true;
+                if (this->verbose) {
+                    std::cout << (packet->flags == 1 ? MAGENTA : YELLOW);
+                    
+                    std::cout << "PACKET " << packet->size
+                            << " / " << packet->buf->size
+                            << " pts=" << packet->pts
+                            << " flags=" << packet->flags;
+                    std::cout << CLR;
+                    std::cout << std::endl;
+                    this->lines_printed++;
+                }
                 break;
             case AVERROR(EAGAIN):
-                std::cerr << "Error receiving packet AVERROR(EAGAIN)" << std::endl;
+                std::cerr << RED << "Error receiving packet AVERROR(EAGAIN)" << CLR << std::endl;
+                this->lines_printed = -1;
                 break;
             case AVERROR_EOF:
-                std::cerr << "Error receiving packet AVERROR_EOF" << std::endl;
+                std::cerr << RED << "Error receiving packet AVERROR_EOF" << CLR << std::endl;
+                this->lines_printed = -1;
                 break;
             case AVERROR(EINVAL):
-                std::cerr << "Error receiving packet AVERROR(EINVAL)" << std::endl;
+                std::cerr << RED << "Error receiving packet AVERROR(EINVAL)" << CLR << std::endl;
+                this->lines_printed = -1;
                 break;
             default:
-                std::cerr << "Error receiving packet" << std::endl;
+                std::cerr << RED << "Error receiving packet" << CLR << std::endl;
+                this->lines_printed = -1;
                 break;
         }
 
-        ffmpeg_image_transport_msgs::msg::FFMPEGPacket outFrameMsg;
-        std_msgs::msg::Header header;
-        header.frame_id = "le_test";
-        uint64_t timestamp_ns = metadata.timestamp;
-        header.stamp = get_current_stamp(timestamp_ns);
-        outFrameMsg.header = header;
-        outFrameMsg.width = this->codec_context->width;
-        outFrameMsg.height = this->codec_context->height;
-        outFrameMsg.encoding = "h.264";
-        outFrameMsg.pts = header.stamp.sec * 1000000000 + header.stamp.nanosec;
-        outFrameMsg.flags = packet->flags;
-        outFrameMsg.is_bigendian = false;
-        // outFrameMsg.data = &packet->data; // uint8[] out
-        // outFrameMsg.data = std::vector<uint8_t>(packet->size);
-        outFrameMsg.data.assign(packet->data, packet->data + packet->size);
+        if (packet_ok) {
+            ffmpeg_image_transport_msgs::msg::FFMPEGPacket outFrameMsg;
+            std_msgs::msg::Header header;
+            header.frame_id = this->frame_id;
+            header.stamp = builtin_interfaces::msg::Time();
+            uint64_t timestamp_ns = metadata.timestamp;
+            get_current_stamp(&header.stamp, timestamp_ns);
+            outFrameMsg.header = header;
+            outFrameMsg.width = this->codec_context->width;
+            outFrameMsg.height = this->codec_context->height;
+            outFrameMsg.encoding = "h.264";
+            outFrameMsg.pts = av_rescale_q(packet->pts /*header.stamp.sec * NS_TO_SEC + header.stamp.nanosec*/,
+                                           codec_context->time_base,
+                                           AVRational{1, 90000});
 
-        std::cout << GREEN << " >> Sending " << outFrameMsg.data.size() << "B" << CLR << " sec: " << outFrameMsg.header.stamp.sec << " nsec:" << outFrameMsg.header.stamp.nanosec << std::endl;
-    
-        this->publisher->publish(outFrameMsg);
+            outFrameMsg.flags = packet->flags;
+            outFrameMsg.is_bigendian = false;
+            // outFrameMsg.data = &packet->data; // uint8[] out
+            // outFrameMsg.data = std::vector<uint8_t>(packet->size);
+            outFrameMsg.data.assign(packet->data, packet->data + packet->size);
+
+            if (this->verbose) {
+                std::cout << GREEN << " >> Sending " << outFrameMsg.data.size() << "B" << CLR << " sec: " << outFrameMsg.header.stamp.sec << " nsec:" << outFrameMsg.header.stamp.nanosec << std::endl;
+                this->lines_printed++;
+            }
+        
+            this->publisher->publish(outFrameMsg);
+        }
 
         av_packet_unref(packet);
         av_packet_free(&packet);   
@@ -343,9 +450,36 @@ void CameraInterface::requestComplete(Request *request) {
     this->camera->queueRequest(request);
 }
 
+int CameraInterface::resetEncoder(const char* device_path) {
+    int fd = open(device_path, O_RDWR);
+    if (fd < 0) {
+        perror("Failed to open V4L2 device");
+        return -1;
+    }
+
+    // Stop streaming
+    enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+    if (ioctl(fd, VIDIOC_STREAMOFF, &type) < 0) {
+        perror("Failed to stop streaming");
+    }
+
+    // Reset the device (optional, driver-dependent)
+    // Some drivers support VIDIOC_RESET, but it's not universal
+    if (ioctl(fd, _IOW('V', 99, int), 0) < 0) {
+        // Fallback: Close and reopen the device
+        close(fd);
+        fd = open(device_path, O_RDWR);
+    }
+
+    close(fd);
+    return 0;
+}
+
 CameraInterface::~CameraInterface() {
+    this->camera->stop();
     this->camera->release();
     this->camera = NULL;
     this->node = NULL;
+    avcodec_close(this->codec_context);
     avcodec_free_context(&this->codec_context);
 }
