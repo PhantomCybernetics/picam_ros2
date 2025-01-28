@@ -9,6 +9,7 @@
 #include <libcamera/pixel_format.h>
 
 #include "picam_ros2.hpp"
+#include "dma_heaps.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "ffmpeg_image_transport_msgs/msg/ffmpeg_packet.hpp"
@@ -36,13 +37,9 @@ using namespace libcamera;
 
 class CameraInterface {
     public:
-        // int width = 1280;
-        // int height = 720;
-        int width = 1920;
-        int height = 1080;
-        int fps = 30;
-
         CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr<PicamROS2> node);
+        void start();
+        void stop();
         ~CameraInterface();
 
     private:
@@ -50,24 +47,49 @@ class CameraInterface {
         std::shared_ptr<PicamROS2> node;
         std::vector<std::unique_ptr<Request>> requests;
 
+        bool running = false;
         AVCodec *codec;
         AVCodecContext *codec_context;
         int frameIdx = 0;
         int bytes_per_pixel;
         rclcpp::Publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>::SharedPtr publisher;
         int lines_printed = 0;
-        bool verbose = true;
+        uint buffer_count;
+        double log_message_every_sec;
+        time_t last_log = 0;
+        
+        time_t last_fps_time = 0;
+        int last_fps = 0;
+        int frame_count = 0;
+
         bool log_scrolls = true;
         int location;
         int rotation;
         std::string model;
 
+        uint width;
+        uint height;
         bool hw_encoder;
+        int fps = 30;
         int bit_rate;
+        int compression;
         std::string frame_id;
 
-        StreamConfiguration streamConfig;
+        uint stride;
+        AVFrame *frame;
+        AVPacket *packet;
+
+        DmaHeap dma_heap;
+        std::map<Stream *, std::vector<std::unique_ptr<FrameBuffer>>> frame_buffers;
+        std::map<FrameBuffer *, std::vector<AVBufferRef *>> mapped_buffers;
+        std::map<FrameBuffer *, std::vector<uint>> mapped_buffer_strides;
+
+        ffmpeg_image_transport_msgs::msg::FFMPEGPacket outFrameMsg;
+        
+        StreamConfiguration *streamConfig;
+        void readConfig();
+        void eventLoop();
         bool initializeEncoder();
-        void requestComplete(Request *request);
+        void frameRequestComplete(Request *request);
         int resetEncoder(const char* device_path);
 };

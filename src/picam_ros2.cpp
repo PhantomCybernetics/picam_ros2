@@ -5,10 +5,14 @@
 #include <string>
 #include <future>
 #include <vector>
+#include <thread>
 
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "libcamera/libcamera.h"
+#include <linux/videodev2.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
 
 #include "picam_ros2/picam_ros2.hpp"
 #include "picam_ros2/camera_interface.hpp"
@@ -19,7 +23,7 @@ using namespace std::chrono_literals;
 PicamROS2::PicamROS2() : Node("picam_ros2"), count_(0)
 {
     this->declare_parameter("topic_prefix", "/picam_h264/camera_");
-    this->declare_parameter("log_message_every_sec", 5.0);
+    this->declare_parameter("log_message_every_sec", 5.0); // -1.0 = off
     this->declare_parameter("log_scroll", true);
 
     //   publisher_ = this->create_publisher<std_msgs::msg::String>("topic", 10);
@@ -51,14 +55,37 @@ void reloadUdevRules() {
     }
 }
 
+static void check_camera_stack()
+{
+	int fd = open("/dev/video0", O_RDWR, 0);
+	if (fd < 0)
+		return;
+
+	v4l2_capability caps;
+	unsigned long request = VIDIOC_QUERYCAP;
+
+	int ret = ioctl(fd, request, &caps);
+	close(fd);
+
+	if (ret < 0 || strcmp((char *)caps.driver, "bm2835 mmal"))
+		return;
+
+	std::cerr << "ERROR: the system appears to be configured for the legacy camera stack" << std::endl;
+	exit(-1);
+}
+
 int main(int argc, char * argv[])
 {
     reloadUdevRules();
+
+    check_camera_stack();
+    std::cout << "Cam stack ok" << std::endl; 
+
     auto cm = std::make_unique<CameraManager>();
     cm->start();
     auto cameras = cm->cameras();
     if (cameras.empty()) {
-        std::cout << "No cameras were identified on the system." << std::endl;
+        std::cout << "No cameras were found on the system." << std::endl;
         cm->stop();
         return EXIT_FAILURE;
     }
@@ -67,16 +94,42 @@ int main(int argc, char * argv[])
     auto node = std::make_shared<PicamROS2>();
 
     std::vector<std::shared_ptr<CameraInterface>> camera_interfaces;
+    std::vector<std::thread> camera_threads;
+
     for (auto const &c : cameras) {
         std::cout << "Found cam: " << c->id() << "" << std::endl;
         auto camera = cm->get(c->id());
-        camera_interfaces.push_back(std::make_shared<CameraInterface>(camera, node));
+        auto cam_interface = std::make_shared<CameraInterface>(camera, node);
+        camera_interfaces.push_back(cam_interface);
+        camera_threads.emplace_back([cam_interface](){
+            cam_interface->start();
+        });
+        camera_threads.back().detach();
     }
-        
-    auto result = node->async_function(5);
+
+    // auto result = node->async_function(5);
     rclcpp::spin(node);
-    std::cout << "Yo we done" << std::endl;
-    // cm->stop();
+    // while (true) {
+    //     std::this_thread::sleep_for(std::chrono::seconds(2));
+    // }
+    
+    std::cout << "Yo, shutting down..." << std::endl;
+
+    for (uint i = 0; i < camera_interfaces.size(); i++) {
+        camera_interfaces[i]->stop();
+    }
+    for (auto& t : camera_threads) {
+        if (t.joinable())
+            t.join();
+    }
+    camera_interfaces.clear();
+    camera_threads.clear();
+
+    // for (std::thread &cam_thread : camera_threads) {
+    //     cam_thread.join();
+    // }
+
+    cm->stop();
     rclcpp::shutdown();
     return 0;
 }
