@@ -9,7 +9,12 @@
 #include <libcamera/pixel_format.h>
 
 #include "picam_ros2.hpp"
+
+#include "encoder_libav.hpp"
+#include "encoder_hw.hpp"
+
 #include "dma_heaps.hpp"
+#include <linux/dma-buf.h>
 
 #include "rclcpp/rclcpp.hpp"
 #include "ffmpeg_image_transport_msgs/msg/ffmpeg_packet.hpp"
@@ -22,16 +27,7 @@ extern "C" {
     #include <libswscale/swscale.h>
 }
 
-const std::string RED = "\033[31m";
-const std::string GREEN = "\033[32m";
-const std::string BLUE = "\033[34m";
-const std::string YELLOW = "\033[33m";
-const std::string MAGENTA = "\033[35m";
-const std::string CYAN = "\033[36m";
-const std::string WHITE = "\033[37m2";
-const std::string CLR = "\033[0m";
-
-const int NS_TO_SEC = 1000000000;
+class Encoder;
 
 using namespace libcamera;
 
@@ -40,24 +36,36 @@ class CameraInterface {
         CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr<PicamROS2> node);
         void start();
         void stop();
+        void publishEncodedData(unsigned char *data, int size, uint8_t flags, uint64_t pts, long timestamp_ns, bool log);
         ~CameraInterface();
+
+        uint width;
+        uint height;
+        uint fps;
+        uint bit_rate;
+        uint compression;
+        uint buffer_count;
+        int bytes_per_pixel;
+        int lines_printed = 0;
 
     private:
         std::shared_ptr<libcamera::Camera> camera;
         std::shared_ptr<PicamROS2> node;
-        std::vector<std::unique_ptr<Request>> requests;
-
         bool running = false;
-        AVCodec *codec;
-        AVCodecContext *codec_context;
-        int frameIdx = 0;
-        int bytes_per_pixel;
-        rclcpp::Publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>::SharedPtr publisher;
-        int lines_printed = 0;
-        uint buffer_count;
-        double log_message_every_sec;
-        time_t last_log = 0;
+        Encoder *encoder;
+
+        std::vector<std::unique_ptr<Request>> capture_requests;
         
+        int64_t frameIdx = 0;
+        
+        rclcpp::Publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>::SharedPtr publisher;
+        
+        // uint out_buffer_count;
+
+        long log_message_every_ns;
+        long last_log = 0;
+        long timestamp_ns_base = 0;
+
         time_t last_fps_time = 0;
         int last_fps = 0;
         int frame_count = 0;
@@ -67,29 +75,44 @@ class CameraInterface {
         int rotation;
         std::string model;
 
-        uint width;
-        uint height;
-        bool hw_encoder;
-        int fps = 30;
-        int bit_rate;
-        int compression;
         std::string frame_id;
+        
+        bool hw_encoder;
+ 
+        bool ae_enable;
+        uint ae_exposure_mode;
+        uint ae_metering_mode;
+        uint ae_constraint_mode;
+        std::vector<double> ae_constraint_mode_values; // [4]
+
+        uint exposure_time;
+        double analog_gain;
+        bool awb_enable;
+        std::vector<double> color_gains; // [2]
+        double brightness;
+        double contrast;
 
         uint stride;
-        AVFrame *frame;
-        AVPacket *packet;
+        // AVFrame *frame;
+        // AVPacket *packet;
+
 
         DmaHeap dma_heap;
-        std::map<Stream *, std::vector<std::unique_ptr<FrameBuffer>>> frame_buffers;
-        std::map<FrameBuffer *, std::vector<AVBufferRef *>> mapped_buffers;
-        std::map<FrameBuffer *, std::vector<uint>> mapped_buffer_strides;
+        // std::map<Stream *, std::vector<std::unique_ptr<FrameBuffer>>> frame_buffers;
+        // std::map<FrameBuffer *, std::vector<AVBufferRef *>> mapped_buffers;
+        // std::map<FrameBuffer *, std::vector<uint>> mapped_buffer_strides;
+        std::map<Stream *, std::vector<std::unique_ptr<FrameBuffer>>> capture_frame_buffers;
+        std::map<FrameBuffer *, std::vector<AVBufferRef *>> mapped_capture_buffers;
+        std::map<FrameBuffer *, std::vector<uint>> mapped_capture_buffer_strides;
 
         ffmpeg_image_transport_msgs::msg::FFMPEGPacket outFrameMsg;
-        
+
         StreamConfiguration *streamConfig;
         void readConfig();
-        void eventLoop();
-        bool initializeEncoder();
-        void frameRequestComplete(Request *request);
-        int resetEncoder(const char* device_path);
+        // void eventLoop();
+        // bool initializeSWEncoder();
+        // bool initializeHWEncoder();
+        // void frameRequestComplete(Request *request);
+        void captureRequestComplete(Request *request);
+        // int resetEncoder(const char* device_path);
 };

@@ -22,7 +22,11 @@ include_directories(./include/)
 
 add_executable(picam
               src/picam_ros2.cpp
+              src/lib.cpp
               src/camera_interface.cpp
+              src/encoder_base.cpp
+              src/encoder_libav.cpp
+              src/encoder_hw.cpp
               src/dma_heaps.cpp
               )
 ament_target_dependencies(picam rclcpp std_msgs ffmpeg_image_transport_msgs)
