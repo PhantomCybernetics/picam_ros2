@@ -7,6 +7,9 @@
 #include <vector>
 #include <thread>
 
+#include <sys/ioctl.h>
+#include <fcntl.h>
+
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "libcamera/libcamera.h"
@@ -14,7 +17,7 @@
 
 #include "picam_ros2/picam_ros2.hpp"
 #include "picam_ros2/camera_interface.hpp"
-#include "picam_ros2/lib.hpp"
+#include "picam_ros2/const.hpp"
 
 using namespace libcamera;
 using namespace std::chrono_literals;
@@ -44,6 +47,34 @@ PicamROS2::PicamROS2() : Node("picam_ros2"), count_(0)
 //   RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str());
 //   publisher_->publish(message);
 // }
+
+void reloadUdevRules() {
+    if (!std::filesystem::exists("/.phntm_devices_initialized")) {
+        std::cout << "\033[35mFirst run, initializing udev rules for /dev\033[0m" << std::endl;        
+        std::system("/ros2_ws/src/picam_ros2/scripts/reload-devices.sh");
+        std::cout << "\033[35mUdev rules initialized\033[0m" << std::endl;
+        std::this_thread::sleep_for(std::chrono::seconds(2));  // needs a bit for the udev rules to take effect and picam init sucessfuly
+    }
+}
+
+void checkCameraStack()
+{
+	int fd = open("/dev/video0", O_RDWR, 0);
+	if (fd < 0)
+		return;
+
+	v4l2_capability caps;
+	unsigned long request = VIDIOC_QUERYCAP;
+
+	int ret = ioctl(fd, request, &caps);
+	close(fd);
+
+	if (ret < 0 || strcmp((char *)caps.driver, "bm2835 mmal"))
+		return;
+
+	std::cerr << "ERROR: the system appears to be configured for the legacy camera stack" << std::endl;
+	exit(-1);
+}
 
 int main(int argc, char * argv[])
 {

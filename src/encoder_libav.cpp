@@ -16,10 +16,10 @@
 // #include "libcamera/control_ids.h"
 // #include "libcamera/property_ids.h"
 
+#include <bitset>
+
 #include "picam_ros2/encoder_libav.hpp"
 #include "picam_ros2/camera_interface.hpp"
-
-// #include "picam_ros2/lib.hpp"
 
 // #include "rclcpp/rclcpp.hpp"
 // #include "rclcpp/qos.hpp"
@@ -141,15 +141,13 @@ EncoderLibAV::EncoderLibAV(CameraInterface *interface, std::shared_ptr<libcamera
     }
 }
 
-void EncoderLibAV::captureRequestComplete(std::vector<AVBufferRef *> plane_buffers, std::vector<uint> plane_strides, int64_t *frameIdx, long timestamp_ns, bool log) {
+void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<uint> plane_strides, int, uint, int64_t *frameIdx, long timestamp_ns, bool log) {
 
     for (size_t i = 0; i < 3; ++i) {
         this->frame_to_encode->buf[i] = plane_buffers[i];
         this->frame_to_encode->data[i] = this->frame_to_encode->buf[i]->data;
         this->frame_to_encode->linesize[i] = plane_strides[i];
     }
-
-    // continue;
 
     /// Set frame index in range: [1, fps]
     this->frame_to_encode->pts = *frameIdx;
@@ -160,7 +158,6 @@ void EncoderLibAV::captureRequestComplete(std::vector<AVBufferRef *> plane_buffe
         this->frame_to_encode->key_frame = 1;
         this->frame_to_encode->pict_type = AVPictureType::AV_PICTURE_TYPE_I;
     }
-    // std::cout << "Sending..." << std::endl;
 
     bool frame_ok = false;
     switch (avcodec_send_frame(this->codec_context, this->frame_to_encode)){

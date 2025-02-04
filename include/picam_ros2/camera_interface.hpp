@@ -56,6 +56,7 @@ class CameraInterface {
 
         std::vector<std::unique_ptr<Request>> capture_requests;
         
+        size_t buffer_size; // whole buffer aligned to 4096
         int64_t frameIdx = 0;
         
         rclcpp::Publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>::SharedPtr publisher;

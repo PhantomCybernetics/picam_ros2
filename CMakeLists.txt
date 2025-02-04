@@ -22,7 +22,6 @@ include_directories(./include/)
 
 add_executable(picam
               src/picam_ros2.cpp
-              src/lib.cpp
               src/camera_interface.cpp
               src/encoder_base.cpp
               src/encoder_libav.cpp

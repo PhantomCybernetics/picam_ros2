@@ -1,38 +1,20 @@
-// #include <chrono>
-// #include <future>
-// #include <memory>
-// #include <string>
-// #include <bitset>
-
-// #include <libcamera/libcamera.h>
-// #include <libcamera/pixel_format.h>
-
-// #include <sys/mman.h>
-// #include <unistd.h>
+#include <sys/mman.h>
 #include <fmt/core.h>
-// #include <linux/dma-buf.h>
-// #include <libcamera/base/shared_fd.h>
+#include <sys/ioctl.h>
 
-// #include "libcamera/camera_manager.h"
-// #include "libcamera/control_ids.h"
-// #include "libcamera/property_ids.h"
-
-#include "picam_ros2/lib.hpp"
-// #include "picam_ros2/picam_ros2.hpp"
+#include "picam_ros2/const.hpp"
 #include "picam_ros2/camera_interface.hpp"
-// #include "picam_ros2/encoder_avcodec.hpp"
-
-// #include "rclcpp/rclcpp.hpp"
-// #include "rclcpp/qos.hpp"
-// #include "std_msgs/msg/header.hpp"
-// #include "builtin_interfaces/msg/time.hpp"
-// #include "ffmpeg_image_transport_msgs/msg/ffmpeg_packet.hpp"
-
-// #include <fcntl.h>
-// #include <sys/ioctl.h>
-// #include <linux/videodev2.h>
 
 using namespace libcamera;
+
+void freeBuffer(void* opaque, uint8_t* data) {
+    munmap(data, static_cast<size_t>(reinterpret_cast<uintptr_t>(opaque)));
+}
+
+uint32_t roundUp4096(uint32_t x) {
+    constexpr uint32_t mask = 4096 - 1; // 0xFFF
+    return (x + mask) & ~mask;
+}
 
 CameraInterface::CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr<PicamROS2> node) {
     this->camera = camera;
@@ -103,12 +85,12 @@ void CameraInterface::start() {
         auto stream = cfg.stream();
 
         std::vector<std::unique_ptr<FrameBuffer>> buffers;
+        this->buffer_size = roundUp4096(cfg.frameSize);
 
 		for (uint i = 0; i < cfg.bufferCount; i++)
 		{
 			std::string name("pica-ros2-" + std::to_string(i));
-            size_t fsize_4096 = roundUp4096(cfg.frameSize);
-			libcamera::UniqueFD fd = this->dma_heap.alloc(name.c_str(), fsize_4096);
+			libcamera::UniqueFD fd = this->dma_heap.alloc(name.c_str(), this->buffer_size);
 
 			if (!fd.isValid())
 				throw std::runtime_error("Failed to allocate capture buffers for stream");
@@ -116,10 +98,10 @@ void CameraInterface::start() {
 			std::vector<FrameBuffer::Plane> plane(1);
 			plane[0].fd = libcamera::SharedFD(std::move(fd));
 			plane[0].offset = 0;
-			plane[0].length = fsize_4096;
+			plane[0].length = this->buffer_size;
 
 			buffers.push_back(std::make_unique<FrameBuffer>(plane));
-			void *memory = mmap(NULL, fsize_4096, PROT_READ , MAP_SHARED, plane[0].fd.get(), 0);
+			void *memory = mmap(NULL, this->buffer_size, PROT_READ , MAP_SHARED, plane[0].fd.get(), 0);
 
             uint plane_offset = 0;
             for (uint j = 0; j < 3; j++) {
@@ -131,7 +113,7 @@ void CameraInterface::start() {
                     static_cast<uint8_t*>(memory) + plane_offset,
                     plane_length,
                     freeBuffer,
-                    reinterpret_cast<void*>(fsize_4096),
+                    reinterpret_cast<void*>(this->buffer_size),
                     0
                 ));
                 this->mapped_capture_buffer_strides[buffers.back().get()].push_back(plane_stride);
@@ -275,7 +257,9 @@ void CameraInterface::captureRequestComplete(Request *request) {
         FrameBuffer *request_buffer = p.second;
         const FrameMetadata &metadata = request_buffer->metadata();
 
-        int ret_start = ::ioctl(p.second->planes()[0].fd.get(), DMA_BUF_IOCTL_SYNC, &dma_sync_start);
+        auto base_fd = p.second->planes()[0].fd.get(); //base plane
+
+        int ret_start = ::ioctl(base_fd, DMA_BUF_IOCTL_SYNC, &dma_sync_start);
 		if (ret_start)
 		    throw std::runtime_error("Failed to sync/start dma buf on queue request");
 
@@ -306,7 +290,7 @@ void CameraInterface::captureRequestComplete(Request *request) {
         auto &plane_buffers = this->mapped_capture_buffers[p.second];
         auto &plane_strides = this->mapped_capture_buffer_strides[p.second];
 
-        int ret_end = ::ioctl(p.second->planes()[0].fd.get(), DMA_BUF_IOCTL_SYNC, &dma_sync_end);
+        int ret_end = ::ioctl(base_fd, DMA_BUF_IOCTL_SYNC, &dma_sync_end);
         if (ret_end)
             throw std::runtime_error("Failed to sync/end dma buf on queue request");
         
@@ -322,7 +306,7 @@ void CameraInterface::captureRequestComplete(Request *request) {
             this->lines_printed++;
          }
 
-        this->encoder->captureRequestComplete(plane_buffers, plane_strides, &this->frameIdx, timestamp_ns, log);
+        this->encoder->encode(plane_buffers, plane_strides, base_fd, this->buffer_size, &this->frameIdx, timestamp_ns, log);
     }
 
     if (!this->running)
@@ -332,6 +316,12 @@ void CameraInterface::captureRequestComplete(Request *request) {
     this->camera->queueRequest(request);
 }
 
+void getCurrentStamp(builtin_interfaces::msg::Time *stamp, uint64_t timestamp_ns) {
+    // Split into seconds and nanoseconds
+    stamp->sec = static_cast<int32_t>(timestamp_ns / NS_TO_SEC);
+    stamp->nanosec = static_cast<uint32_t>(timestamp_ns % NS_TO_SEC);;
+}
+
 void CameraInterface::publishEncodedData(unsigned char *data, int size, uint8_t flags, uint64_t pts, long timestamp_ns, bool log) {
 
 
@@ -339,8 +329,6 @@ void CameraInterface::publishEncodedData(unsigned char *data, int size, uint8_t 
     this->outFrameMsg.pts = pts;
 
     this->outFrameMsg.flags = flags;
-    // outFrameMsg.data = &packet->data; // uint8[] out
-    // outFrameMsg.data = std::vector<uint8_t>(packet->size);
     this->outFrameMsg.data.assign(data, data + size);
 
     if (log) {

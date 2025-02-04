@@ -1,6 +1,21 @@
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <linux/videodev2.h>
+#include <string>
+#include <sys/mman.h>
 
 #include "picam_ros2/encoder_hw.hpp"
 #include "picam_ros2/camera_interface.hpp"
+
+int xioctl(int fd, unsigned long ctl, void *arg)
+{
+	int ret, num_tries = 10;
+	do
+	{
+		ret = ioctl(fd, ctl, arg);
+	} while (ret == -1 && errno == EINTR && num_tries-- > 0);
+	return ret;
+}
 
 EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Camera> camera)
 	: Encoder (interface, camera) {
@@ -157,8 +172,34 @@ EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Came
     std::cerr << CYAN << "Encoder initiated for " << this->interface->width << "x" << this->interface->height << " @ " << this->interface->fps << " fps" << "; BPP=" << this->interface->bytes_per_pixel << CLR << std::endl;
 }
 
-void EncoderHW::captureRequestComplete(std::vector<AVBufferRef *> plane_buffers, std::vector<uint> plane_strides, int64_t *frameIdx, long timestamp_ns, bool log) {
 
+void EncoderHW::encode(std::vector<AVBufferRef *>, std::vector<uint>, int base_fd, uint size, int64_t *frameIdx, long timestamp_ns, bool log) {
 
+	int index = 0;
+	{
+		// We need to find an available output buffer (input to the codec) to
+		// "wrap" the DMABUF.
+		// std::lock_guard<std::mutex> lock(input_buffers_available_mutex_);
+		// if (input_buffers_available_.empty())
+		// 	throw std::runtime_error("no buffers available to queue codec input");
+		// index = input_buffers_available_.front();
+		// input_buffers_available_.pop();
+	}
+
+	v4l2_buffer buf = {};
+	v4l2_plane planes[VIDEO_MAX_PLANES] = {};
+	buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	buf.index = index;
+	buf.field = V4L2_FIELD_NONE;
+	buf.memory = V4L2_MEMORY_DMABUF;
+	buf.length = 1;
+	buf.timestamp.tv_sec = timestamp_ns / NS_TO_SEC;
+	buf.timestamp.tv_usec = timestamp_ns % 1000;
+	buf.m.planes = planes;
+	buf.m.planes[0].m.fd = base_fd;
+	buf.m.planes[0].bytesused = size;
+	buf.m.planes[0].length = size;
+	if (xioctl(this->encoder_fd, VIDIOC_QBUF, &buf) < 0)
+		throw std::runtime_error("failed to queue input to codec");
 
 }
