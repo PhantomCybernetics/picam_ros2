@@ -7,6 +7,8 @@
 #include "picam_ros2/encoder_hw.hpp"
 #include "picam_ros2/camera_interface.hpp"
 
+#include <poll.h>
+
 int xioctl(int fd, unsigned long ctl, void *arg)
 {
 	int ret, num_tries = 10;
@@ -22,6 +24,9 @@ EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Came
 
     std::cout << GREEN << "Using HW encoder" << CLR << std::endl;
     
+	this->time_base.num = 1;
+	this->time_base.den = NS_TO_SEC;
+
     const char device_name[] = "/dev/video11";
 	this->encoder_fd = open(device_name, O_RDWR, 0);
 	if (this->encoder_fd < 0)
@@ -110,7 +115,6 @@ EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Came
 	// (input to the encoder) shares buffers from our caller, these must be
 	// DMABUFs. Buffers for the encoded bitstream must be allocated and
 	// m-mapped.
-
     v4l2_requestbuffers reqbufs = {};
 	reqbufs.count = this->interface->buffer_count;
 	reqbufs.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
@@ -121,11 +125,11 @@ EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Came
 
 	// We have to maintain a list of the buffers we can use when our caller gives
 	// us another frame to encode.
-	// for (unsigned int i = 0; i < reqbufs.count; i++)
-	// 	input_buffers_available_.push(i);
+	for (uint i = 0; i < reqbufs.count; i++)
+		this->input_buffers_available.push(i);
 
 	reqbufs = {};
-	reqbufs.count = 16;
+	reqbufs.count = NUM_CAPTURE_BUFFERS;
 	reqbufs.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	reqbufs.memory = V4L2_MEMORY_MMAP;
 	if (xioctl(this->encoder_fd, VIDIOC_REQBUFS, &reqbufs) < 0)
@@ -134,6 +138,7 @@ EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Came
 	// num_capture_buffers_ = reqbufs.count;
 
     this->hw_buffers = new BufferDescription[reqbufs.count]; // CameraInterface::BufferDescription();
+	this->buffer_meta = new BufferMeta[reqbufs.count];
 	for (uint i = 0; i < reqbufs.count; i++)
 	{
 		v4l2_plane planes[VIDEO_MAX_PLANES];
@@ -169,6 +174,8 @@ EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Came
 	// output_thread_ = std::thread(&H264Encoder::outputThread, this);
 	// poll_thread_ = std::thread(&H264Encoder::pollThread, this);
 
+	this->poll_thread = std::thread(&EncoderHW::pollThread, this);
+
     std::cerr << CYAN << "Encoder initiated for " << this->interface->width << "x" << this->interface->height << " @ " << this->interface->fps << " fps" << "; BPP=" << this->interface->bytes_per_pixel << CLR << std::endl;
 }
 
@@ -179,11 +186,11 @@ void EncoderHW::encode(std::vector<AVBufferRef *>, std::vector<uint>, int base_f
 	{
 		// We need to find an available output buffer (input to the codec) to
 		// "wrap" the DMABUF.
-		// std::lock_guard<std::mutex> lock(input_buffers_available_mutex_);
-		// if (input_buffers_available_.empty())
-		// 	throw std::runtime_error("no buffers available to queue codec input");
-		// index = input_buffers_available_.front();
-		// input_buffers_available_.pop();
+		std::lock_guard<std::mutex> lock(this->input_buffers_available_mutex);
+		if (this->input_buffers_available.empty())
+			throw std::runtime_error("no buffers available to queue codec input");
+		index = this->input_buffers_available.front();
+		this->input_buffers_available.pop();
 	}
 
 	v4l2_buffer buf = {};
@@ -199,7 +206,114 @@ void EncoderHW::encode(std::vector<AVBufferRef *>, std::vector<uint>, int base_f
 	buf.m.planes[0].m.fd = base_fd;
 	buf.m.planes[0].bytesused = size;
 	buf.m.planes[0].length = size;
+
+	this->buffer_meta[index].frame_idx = *frameIdx;
+	this->buffer_meta[index].timestamp_ns = timestamp_ns;
+	this->buffer_meta[index].log = log;
+
+	*frameIdx = ((*frameIdx) % this->interface->fps) + 1;
+
 	if (xioctl(this->encoder_fd, VIDIOC_QBUF, &buf) < 0)
 		throw std::runtime_error("failed to queue input to codec");
 
+	std::cout << "Sending frame to be hw-encoded (buff " << index << ")" << std::endl;
+	this->interface->lines_printed++;
+
+}
+
+void EncoderHW::pollThread()
+{
+	while (true)
+	{
+		pollfd p = {this->encoder_fd, POLLIN, 0};
+		int ret = poll(&p, 1, 200);
+		{
+			std::lock_guard<std::mutex> lock(this->input_buffers_available_mutex);
+			if (this->abort_poll && this->input_buffers_available.size() == this->interface->buffer_count)
+				break;
+		}
+		if (ret == -1)
+		{
+			if (errno == EINTR)
+				continue;
+			throw std::runtime_error("unexpected errno " + std::to_string(errno) + " from poll");
+		}
+		if (p.revents & POLLIN)
+		{
+			v4l2_buffer buf = {};
+			v4l2_plane planes[VIDEO_MAX_PLANES] = {};
+			buf.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+			buf.memory = V4L2_MEMORY_DMABUF;
+			buf.length = 1;
+			buf.m.planes = planes;
+			int ret = xioctl(this->encoder_fd, VIDIOC_DQBUF, &buf);
+			BufferMeta meta;
+			uint output_index;
+			if (ret == 0)
+			{
+				output_index = buf.index;
+				meta = this->buffer_meta[output_index];
+				// Return this to the caller, first noting that this buffer, identified
+				// by its index, is available for queueing up another frame.
+				{
+					std::lock_guard<std::mutex> lock(this->input_buffers_available_mutex);
+					this->input_buffers_available.push(buf.index);
+				}
+				// input_done_callback_(nullptr);
+			}
+
+			buf = {};
+			memset(planes, 0, sizeof(planes));
+			buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+			buf.memory = V4L2_MEMORY_MMAP;
+			buf.length = 1;
+			buf.m.planes = planes;
+			ret = xioctl(this->encoder_fd, VIDIOC_DQBUF, &buf);
+			if (ret == 0)
+			{
+				// We push this encoded buffer to another thread so that our
+				// application can take its time with the data without blocking the
+				// encode process.
+				// int64_t timestamp_ns = (buf.timestamp.tv_sec * NS_TO_SEC) + buf.timestamp.tv_usec * 1000;
+
+				bool log = meta.log;
+
+				int64_t timestamp_ns = (int64_t) meta.timestamp_ns;
+				if (log) {
+					std::cout << MAGENTA << "Frame encoded (buff " << output_index << "/" << buf.index << "), ts=" << timestamp_ns << CLR << std::endl;
+					this->interface->lines_printed++;
+				}
+
+				uint64_t pts = av_rescale_q(meta.frame_idx, //this->encoded_packet->pts, //this->outFrameMsg.header.stamp.sec * NS_TO_SEC + this->outFrameMsg.header.stamp.nanosec, //this->packet->pts
+                                    		AVRational{1, (int)this->interface->fps},
+                                    		AVRational{1, 90000});
+				bool keyframe = !!(buf.flags & V4L2_BUF_FLAG_KEYFRAME);
+				this->interface->publish((unsigned char*) this->hw_buffers[buf.index].mem, buf.m.planes[0].bytesused, keyframe, pts, timestamp_ns, log);
+				
+				// OutputItem item = { buffers_[buf.index].mem,
+				// 					buf.m.planes[0].bytesused,
+				// 					buf.m.planes[0].length,
+				// 					buf.index,
+				// 					!!(buf.flags & V4L2_BUF_FLAG_KEYFRAME),
+				// 					timestamp_us };
+				// std::lock_guard<std::mutex> lock(output_mutex_);
+				// output_queue_.push(item);
+				// output_cond_var_.notify_one();
+				auto index = buf.index;
+				auto length = buf.length;
+
+				v4l2_buffer buf = {};
+				v4l2_plane planes[VIDEO_MAX_PLANES] = {};
+				buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+				buf.memory = V4L2_MEMORY_MMAP;
+				buf.index = index;
+				buf.length = 1;
+				buf.m.planes = planes;
+				buf.m.planes[0].bytesused = 0;
+				buf.m.planes[0].length = length;
+				if (xioctl(this->encoder_fd, VIDIOC_QBUF, &buf) < 0)
+					throw std::runtime_error("failed to re-queue encoded buffer");
+			}
+		}
+	}
 }

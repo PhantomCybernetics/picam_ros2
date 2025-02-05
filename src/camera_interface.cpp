@@ -322,13 +322,12 @@ void getCurrentStamp(builtin_interfaces::msg::Time *stamp, uint64_t timestamp_ns
     stamp->nanosec = static_cast<uint32_t>(timestamp_ns % NS_TO_SEC);;
 }
 
-void CameraInterface::publishEncodedData(unsigned char *data, int size, uint8_t flags, uint64_t pts, long timestamp_ns, bool log) {
-
+void CameraInterface::publish(unsigned char *data, int size, bool keyframe, uint64_t pts, long timestamp_ns, bool log) {
 
     getCurrentStamp(&this->outFrameMsg.header.stamp, timestamp_ns);
     this->outFrameMsg.pts = pts;
 
-    this->outFrameMsg.flags = flags;
+    this->outFrameMsg.flags = keyframe ? 1 : 0;
     this->outFrameMsg.data.assign(data, data + size);
 
     if (log) {

@@ -246,8 +246,8 @@ void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<
         uint64_t pts = av_rescale_q(this->encoded_packet->pts, //this->outFrameMsg.header.stamp.sec * NS_TO_SEC + this->outFrameMsg.header.stamp.nanosec, //this->packet->pts
                                     codec_context->time_base,
                                     AVRational{1, 90000});
-        uint8_t flags = this->encoded_packet->flags & AV_PKT_FLAG_KEY;
-        this->interface->publishEncodedData(this->encoded_packet->data, this->encoded_packet->size, flags, pts, timestamp_ns, log);
+        bool keyframe = !!(this->encoded_packet->flags & AV_PKT_FLAG_KEY);
+        this->interface->publish(this->encoded_packet->data, this->encoded_packet->size, keyframe, pts, timestamp_ns, log);
     }
     
 }

@@ -36,7 +36,7 @@ class CameraInterface {
         CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr<PicamROS2> node);
         void start();
         void stop();
-        void publishEncodedData(unsigned char *data, int size, uint8_t flags, uint64_t pts, long timestamp_ns, bool log);
+        void publish(unsigned char *data, int size, bool keyframe, uint64_t pts, long timestamp_ns, bool log);
         ~CameraInterface();
 
         uint width;
