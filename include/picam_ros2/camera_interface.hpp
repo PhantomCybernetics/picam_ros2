@@ -7,6 +7,7 @@
 
 #include <libcamera/libcamera.h>
 #include <libcamera/pixel_format.h>
+#include <libcamera/transform.h>
 
 #include "picam_ros2.hpp"
 
@@ -19,21 +20,13 @@
 #include "rclcpp/rclcpp.hpp"
 #include "ffmpeg_image_transport_msgs/msg/ffmpeg_packet.hpp"
 
-extern "C" {
-    #include <libavcodec/avcodec.h>
-    #include <libavcodec/codec_id.h>
-    #include <libavutil/opt.h>
-    #include <libavutil/imgutils.h>
-    #include <libswscale/swscale.h>
-}
-
 class Encoder;
 
 using namespace libcamera;
 
 class CameraInterface {
     public:
-        CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr<PicamROS2> node);
+        CameraInterface(std::shared_ptr<Camera> camera, int location, int rotation, std::string model, std::shared_ptr<PicamROS2> node);
         void start();
         void stop();
         void publish(unsigned char *data, int size, bool keyframe, uint64_t pts, long timestamp_ns, bool log);
@@ -46,10 +39,27 @@ class CameraInterface {
         uint compression;
         uint buffer_count;
         int bytes_per_pixel;
-        int lines_printed = 0;
+
+        template<typename... Args>
+        void log(const Args&... args) {
+            std::ostringstream oss;
+            (oss << ... << args);
+            std::cout << oss.str() << CLR << std::endl;
+            this->lines_printed++;
+        }
+        template<typename... Args>
+        void err(const Args&... args) {
+            std::ostringstream oss;
+            (oss << ... << args);
+            std::cerr << RED << oss.str() << CLR << std::endl;
+            this->lines_printed = -1; // don't erase on err
+        }
 
     private:
+        int lines_printed = 0;
+        
         std::shared_ptr<libcamera::Camera> camera;
+
         std::shared_ptr<PicamROS2> node;
         bool running = false;
         Encoder *encoder;
@@ -78,8 +88,8 @@ class CameraInterface {
 
         std::string frame_id;
         
-        bool hw_encoder;
- 
+        bool hw_encoder, hflip, vflip;
+
         bool ae_enable;
         uint ae_exposure_mode;
         uint ae_metering_mode;

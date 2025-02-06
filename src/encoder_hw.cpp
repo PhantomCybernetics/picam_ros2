@@ -7,6 +7,7 @@
 #include "picam_ros2/encoder_hw.hpp"
 #include "picam_ros2/camera_interface.hpp"
 
+#include <bitset>
 #include <poll.h>
 
 int xioctl(int fd, unsigned long ctl, void *arg)
@@ -24,8 +25,8 @@ EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Came
 
     std::cout << GREEN << "Using HW encoder" << CLR << std::endl;
     
-	this->time_base.num = 1;
-	this->time_base.den = NS_TO_SEC;
+	// this->time_base.num = 1;
+	// this->time_base.den = NS_TO_SEC;
 
     const char device_name[] = "/dev/video11";
 	this->encoder_fd = open(device_name, O_RDWR, 0);
@@ -65,8 +66,8 @@ EncoderHW::EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Came
     if (xioctl(this->encoder_fd, VIDIOC_S_CTRL, &ctrl) < 0)
         throw std::runtime_error("failed to set level");
 	
-    ctrl.id = V4L2_CID_MPEG_VIDEO_H264_I_PERIOD;
-    ctrl.value = 0;
+    ctrl.id = V4L2_CID_MPEG_VIDEO_H264_I_PERIOD; //keyframe generation period
+    ctrl.value = this->interface->fps;
     if (xioctl(this->encoder_fd, VIDIOC_S_CTRL, &ctrl) < 0)
         throw std::runtime_error("failed to set intra period");
 	
@@ -216,8 +217,8 @@ void EncoderHW::encode(std::vector<AVBufferRef *>, std::vector<uint>, int base_f
 	if (xioctl(this->encoder_fd, VIDIOC_QBUF, &buf) < 0)
 		throw std::runtime_error("failed to queue input to codec");
 
-	std::cout << "Sending frame to be hw-encoded (buff " << index << ")" << std::endl;
-	this->interface->lines_printed++;
+	// std::cout << "Sending frame to be hw-encoded (buff " << index << ")" << std::endl;
+	// this->interface->lines_printed++;
 
 }
 
@@ -277,17 +278,18 @@ void EncoderHW::pollThread()
 				// int64_t timestamp_ns = (buf.timestamp.tv_sec * NS_TO_SEC) + buf.timestamp.tv_usec * 1000;
 
 				bool log = meta.log;
+				bool keyframe = !!(buf.flags & V4L2_BUF_FLAG_KEYFRAME);
 
 				int64_t timestamp_ns = (int64_t) meta.timestamp_ns;
 				if (log) {
-					std::cout << MAGENTA << "Frame encoded (buff " << output_index << "/" << buf.index << "), ts=" << timestamp_ns << CLR << std::endl;
-					this->interface->lines_printed++;
+					auto clr = keyframe ? MAGENTA : YELLOW;
+					this->interface->log(clr, "Frame encoded (buff ", output_index, "/", buf.index, "), ts=", timestamp_ns, "; flags=", std::bitset<4>(buf.flags));
 				}
 
 				uint64_t pts = av_rescale_q(meta.frame_idx, //this->encoded_packet->pts, //this->outFrameMsg.header.stamp.sec * NS_TO_SEC + this->outFrameMsg.header.stamp.nanosec, //this->packet->pts
                                     		AVRational{1, (int)this->interface->fps},
                                     		AVRational{1, 90000});
-				bool keyframe = !!(buf.flags & V4L2_BUF_FLAG_KEYFRAME);
+				
 				this->interface->publish((unsigned char*) this->hw_buffers[buf.index].mem, buf.m.planes[0].bytesused, keyframe, pts, timestamp_ns, log);
 				
 				// OutputItem item = { buffers_[buf.index].mem,
@@ -316,4 +318,42 @@ void EncoderHW::pollThread()
 			}
 		}
 	}
+}
+
+EncoderHW::~EncoderHW() {
+
+	std::cout << BLUE << "Cleaning up hw encoder" << CLR << std::endl;
+
+	this->abort_poll = true;
+	this->poll_thread.join();
+
+	// Turn off streaming on both the output and capture queues, and "free" the
+	// buffers that we requested. The capture ones need to be "munmapped" first.
+
+	v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	if (xioctl(this->encoder_fd, VIDIOC_STREAMOFF, &type) < 0)
+		std::cerr << "Failed to stop output streaming" << std::endl;
+	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	if (xioctl(this->encoder_fd, VIDIOC_STREAMOFF, &type) < 0)
+		std::cerr << "Failed to stop capture streaming" << std::endl;
+
+	v4l2_requestbuffers reqbufs = {};
+	reqbufs.count = 0;
+	reqbufs.type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
+	reqbufs.memory = V4L2_MEMORY_DMABUF;
+	if (xioctl(this->encoder_fd, VIDIOC_REQBUFS, &reqbufs) < 0)
+		std::cerr << "Request to free output buffers failed" << std::endl;
+
+	for (int i = 0; i < NUM_CAPTURE_BUFFERS; i++)
+		if (munmap(this->hw_buffers[i].mem, this->hw_buffers[i].size) < 0)
+			std::cerr << "Failed to unmap buffer" << std::endl;
+	reqbufs = {};
+	reqbufs.count = 0;
+	reqbufs.type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+	reqbufs.memory = V4L2_MEMORY_MMAP;
+	if (xioctl(this->encoder_fd, VIDIOC_REQBUFS, &reqbufs) < 0)
+		std::cerr << "Request to free capture buffers failed" << std::endl;
+
+	close(this->encoder_fd);
+	std::cout << "H264Encoder closed" << std::endl;
 }

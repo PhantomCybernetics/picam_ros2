@@ -166,24 +166,19 @@ void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<
             *frameIdx = ((*frameIdx) % this->codec_context->framerate.num) + 1;
             break;
         case AVERROR(EAGAIN):
-            std::cerr << RED << "Error sending frame to encoder: AVERROR(EAGAIN)" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error sending frame to encoder: AVERROR(EAGAIN)");
             break;
         case AVERROR_EOF:
-            std::cerr << RED << "Error sending frame to encoder: AVERROR_EOF" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error sending frame to encoder: AVERROR_EOF");
             break;
         case AVERROR(EINVAL):
-            std::cerr << RED << "Error sending frame to encoder: AVERROR(EINVAL)" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error sending frame to encoder: AVERROR(EINVAL)");
             break;
         case AVERROR(ENOMEM):
-            std::cerr << RED << "Error sending frame to encoder: AVERROR(ENOMEM)" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error sending frame to encoder: AVERROR(ENOMEM)");
             break;
         default:
-            std::cerr << RED << "Error sending frame to encoder: Other error" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error sending frame to encoder: Other error");
             break;
     }
 
@@ -202,44 +197,34 @@ void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<
             /// use packet, copy/send it's data, or whatever
             packet_ok = true;
             if (log) {
-                std::cout << (this->encoded_packet->flags == 1 ? MAGENTA : YELLOW);
-                
-                std::cout << "PACKET " << this->encoded_packet->size
-                        << " / " << this->encoded_packet->buf->size
-                        << " pts=" << this->encoded_packet->pts
-                        << " flags=" << this->encoded_packet->flags;
-                std::cout << CLR;
-                std::cout << std::endl;
-                this->interface->lines_printed++;
+                auto clr = this->encoded_packet->flags == 1 ? MAGENTA : YELLOW;
+                this->interface->log(clr, "PACKET ", this->encoded_packet->size,
+                                     " / ", this->encoded_packet->buf->size,
+                                     " pts=", this->encoded_packet->pts,
+                                     " flags=", this->encoded_packet->flags);
             }
             break;
         case AVERROR(EAGAIN):
-            std::cerr << RED << "Error receiving packet AVERROR(EAGAIN)" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error receiving packet AVERROR(EAGAIN)");
             break;
         case AVERROR_EOF:
-            std::cerr << RED << "Error receiving packet AVERROR_EOF" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error receiving packet AVERROR_EOF");
             break;
         case AVERROR(EINVAL):
-            std::cerr << RED << "Error receiving packet AVERROR(EINVAL)" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error receiving packet AVERROR(EINVAL)");
             break;
         default:
-            std::cerr << RED << "Error receiving packet" << CLR << std::endl;
-            this->interface->lines_printed = -1;
+            this->interface->err("Error receiving packet");
             break;
     }
 
     if (this->encoded_packet->flags & AV_PKT_FLAG_CORRUPT) {
-        std::cerr << RED << "Packed flagged as corrupt" << CLR << std::endl;
-        this->interface->lines_printed = -1;
+        this->interface->err("Packed flagged as corrupt");
         return;
     }
 
     if (this->encoded_packet->flags != 0 && this->encoded_packet->flags != AV_PKT_FLAG_KEY) {
-        std::cerr << MAGENTA << "Packed flags:" << std::bitset<4>(this->encoded_packet->flags) << CLR << std::endl;
-        this->interface->lines_printed = -1;
+        this->interface->err(MAGENTA, "Packed flags:", std::bitset<4>(this->encoded_packet->flags));
     }
     
     if (packet_ok) {
@@ -255,7 +240,7 @@ void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<
 
 
 EncoderLibAV::~EncoderLibAV() {
-    std::cout << BLUE << "Cleaning up encoder" << CLR << std::endl;
+    std::cout << BLUE << "Cleaning up sw encoder" << CLR << std::endl;
 
     av_frame_unref(this->frame_to_encode);
     av_frame_free(&this->frame_to_encode);

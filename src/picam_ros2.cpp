@@ -98,9 +98,26 @@ int main(int argc, char * argv[])
     std::vector<std::shared_ptr<CameraInterface>> camera_interfaces;
 
     for (auto const &c : cameras) {
-        std::cout << "Found cam: " << c->id() << "" << std::endl;
+        
         auto camera = cm->get(c->id());
-        auto cam_interface = std::make_shared<CameraInterface>(camera, node);
+
+        int location = -1, rotation = -1;
+        std::string model = "N/A";
+
+        const ControlList &props = camera->properties();
+        if (props.contains(properties::Location.id())) {
+            location = props.get(properties::Location).value();
+        }
+        if (props.contains(properties::Model.id())) {
+            model = props.get(properties::Model)->c_str();
+        }
+        if (props.contains(properties::Rotation.id())) {
+            rotation = props.get(properties::Rotation).value();
+        }  
+
+        std::cout << CYAN << "Found Cam ID=" << c->id() << ", Location=" << location << ", Rotation=" << rotation << "; Model=" << model << CLR << std::endl;
+
+        auto cam_interface = std::make_shared<CameraInterface>(camera, location, rotation, model, node);
         camera_interfaces.push_back(cam_interface);
         cam_interface->start();
     }

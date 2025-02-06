@@ -39,5 +39,5 @@ class EncoderHW : Encoder {
         std::thread poll_thread;
 
         bool abort_poll = false;
-        AVRational time_base;
+        // AVRational time_base;
 };

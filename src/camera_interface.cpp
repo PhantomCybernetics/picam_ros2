@@ -16,10 +16,14 @@ uint32_t roundUp4096(uint32_t x) {
     return (x + mask) & ~mask;
 }
 
-CameraInterface::CameraInterface(std::shared_ptr<Camera> camera, std::shared_ptr<PicamROS2> node) {
+CameraInterface::CameraInterface(std::shared_ptr<Camera> camera, int location, int rotation, std::string model, std::shared_ptr<PicamROS2> node) {
     this->camera = camera;
     this->node = node;
+    this->location = location;
+    this->rotation = rotation;
+    this->model = model;
 }
+
 
 
 void CameraInterface::start() {
@@ -28,25 +32,21 @@ void CameraInterface::start() {
 
     this->running = true;
 
-    std::cout << GREEN << "Initializing " << camera->id() << CLR << std::endl; 
+    this->log(GREEN, "Initializing ", camera->id());
 
     // inspect camera
+
     this->camera->acquire();
-    const ControlList &props = camera->properties();
-    if (props.contains(properties::Location.id())) {
-        this->location = props.get(properties::Location).value();
-    }
-    if (props.contains(properties::Model.id())) {
-        this->model = props.get(properties::Model)->c_str();
-    }
-    if (props.contains(properties::Rotation.id())) {
-        this->rotation = props.get(properties::Rotation).value();
-    }  
 
     // declare params & read configs
     this->readConfig();
     
-
+    libcamera::Transform transform = Transform::Identity;
+	if (this->hflip)
+		transform = Transform::HFlip * transform;
+	if (this->vflip)
+		transform = Transform::VFlip * transform;
+    
     // configure camera
     std::unique_ptr<CameraConfiguration> config = this->camera->generateConfiguration( { StreamRole::VideoRecording } );
     
@@ -55,6 +55,7 @@ void CameraInterface::start() {
     this->streamConfig->size.width = this->width;
     this->streamConfig->size.height = this->height;
     this->streamConfig->bufferCount = this->buffer_count;
+    config->orientation = config->orientation * transform;
     // this->streamConfig.stride = (uint)this->width;
 
     if (config->validate() == CameraConfiguration::Invalid)
@@ -62,25 +63,24 @@ void CameraInterface::start() {
 
     this->stride = this->streamConfig->stride;
 
-    std::cout << YELLOW << "Camera model: " << this->model << " Location: " << this->location << " Rotation: " << this->rotation << CLR << std::endl; 
-    std::cout << YELLOW << "Camera orinetation: " << config->orientation << CLR << std::endl; 
-    std::cout << YELLOW << "Stream config: " << this->streamConfig->toString() << CLR << std::endl; 
-    std::cout << YELLOW << "Stride: " << this->streamConfig->stride << CLR << std::endl; 
-    std::cout << YELLOW << "Bit rate: " << this->bit_rate << CLR << std::endl; 
-    std::cout << YELLOW << "Compression rate: " << this->compression << CLR << std::endl; 
-    std::cout << YELLOW << "Buffer count: " << this->streamConfig->bufferCount << CLR << std::endl; 
-    std::cout << YELLOW << "Auto exposure enabled: " << this->ae_enable << CLR << std::endl; 
-    std::cout << YELLOW << "Exposure time: " << this->exposure_time << " ns"<< CLR << std::endl; 
-    std::cout << YELLOW << "Analogue gain: " << this->analog_gain << CLR << std::endl; 
-    std::cout << YELLOW << "Auto white balance enabled: " << this->awb_enable << CLR << std::endl; 
-    std::cout << YELLOW << "Color gains: {" << this->color_gains[0] << ", " << this->color_gains[1] << "}"<< CLR << std::endl; 
-    std::cout << YELLOW << "Brightness: " << this->brightness << CLR << std::endl; 
-    std::cout << YELLOW << "Contrast: " << this->contrast << CLR << std::endl; 
+    this->log(YELLOW, "Camera orinetation: ", config->orientation); 
+    this->log(YELLOW, "Stream config: ", this->streamConfig->toString()); 
+    this->log(YELLOW, "Stride: ", this->streamConfig->stride); 
+    this->log(YELLOW, "Bit rate: ", this->bit_rate); 
+    this->log(YELLOW, "Compression rate: ", this->compression); 
+    this->log(YELLOW, "Buffer count: ", this->streamConfig->bufferCount); 
+    this->log(YELLOW, "Auto exposure enabled: ", this->ae_enable); 
+    this->log(YELLOW, "Exposure time: ", this->exposure_time, " ns"); 
+    this->log(YELLOW, "Analogue gain: ", this->analog_gain); 
+    this->log(YELLOW, "Auto white balance enabled: ", this->awb_enable); 
+    this->log(YELLOW, "Color gains: {", this->color_gains[0], ", ", this->color_gains[1], "}"); 
+    this->log(YELLOW, "Brightness: ", this->brightness); 
+    this->log(YELLOW, "Contrast: ", this->contrast); 
     this->camera->configure(config.get());
 
     // FrameBufferAllocator *allocator = new FrameBufferAllocator(this->camera);
 
-    std::cout << "Allocating..." << std::endl;
+    this->log("Allocating...");
     for (StreamConfiguration &cfg : *config) {
         auto stream = cfg.stream();
 
@@ -125,7 +125,7 @@ void CameraInterface::start() {
 
         this->capture_frame_buffers[stream] = std::move(buffers);
 
-        std::cout << "Allocated " << this->capture_frame_buffers[stream].size() << " capture dma buffers for stream pixel format: " << cfg.pixelFormat.toString() << std::endl;
+        this->log("Allocated ", this->capture_frame_buffers[stream].size(), " capture dma buffers for stream pixel format: ", cfg.pixelFormat.toString());
 
         // int ret = allocator->allocate(stream);
         // if (ret < 0) {
@@ -172,11 +172,13 @@ void CameraInterface::start() {
             }
             this->capture_requests.push_back(std::move(request));
         }
+
+        this->lines_printed = 0;
     }
 
     // init ros frame publisher
     std::string topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}", this->location, this->model);
-    std::cout << "Creatinng publisher for " << topic << std::endl;
+    this->log("Creatinng publisher for ", topic);
     auto qos = rclcpp::QoS(1);
     this->publisher = this->node->create_publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>(topic, qos);
     
@@ -272,6 +274,7 @@ void CameraInterface::captureRequestComplete(Request *request) {
         this->frame_count++;
 
         if (log) {
+            // erase latest log lines if not scrolling
             if (!this->log_scrolls && this->lines_printed > 0) {
                 for (int i = 0; i < this->lines_printed; i++) {
                     std::cout << std::string(this->lines_printed, '\033') << "[A\033[K";
@@ -281,8 +284,7 @@ void CameraInterface::captureRequestComplete(Request *request) {
         }
 
         if (log) {
-            std::cout << this->last_fps << " FPS" << std::endl;
-            this->lines_printed++;
+            this->log(this->last_fps, " FPS");
             std::cout << std::setw(6) << std::setfill('0') << metadata.sequence << ": ";
         }
 
@@ -331,8 +333,7 @@ void CameraInterface::publish(unsigned char *data, int size, bool keyframe, uint
     this->outFrameMsg.data.assign(data, data + size);
 
     if (log) {
-        std::cout << GREEN << " >> Sending " << this->outFrameMsg.data.size() << "B" << CLR << " sec: " << this->outFrameMsg.header.stamp.sec << " nsec: " << outFrameMsg.header.stamp.nanosec << std::endl;
-        this->lines_printed++;
+        this->log(GREEN, " >> Sending ", this->outFrameMsg.data.size(), "B", CLR, " sec: ", this->outFrameMsg.header.stamp.sec, " nsec: ", outFrameMsg.header.stamp.nanosec);
     }
 
     this->publisher->publish(this->outFrameMsg);
@@ -616,6 +617,8 @@ void CameraInterface::readConfig() {
     
     this->node->declare_parameter(config_prefix + "hflip", false);
     this->node->declare_parameter(config_prefix + "vflip", false);
+    this->hflip = this->node->get_parameter(config_prefix + "hflip").as_bool();
+    this->vflip = this->node->get_parameter(config_prefix + "vflip").as_bool();
 
     this->node->declare_parameter(config_prefix + "hw_encoder", true);
     this->hw_encoder = this->node->get_parameter(config_prefix + "hw_encoder").as_bool();
@@ -713,8 +716,8 @@ CameraInterface::~CameraInterface() {
     std::cout << BLUE << "Cleaning up " << this->model << " interface" << CLR << std::endl;
 
     this->camera->stop();
-    this->camera->requestCompleted.disconnect(this, &CameraInterface::captureRequestComplete);
     this->camera->release();
+    this->camera->requestCompleted.disconnect(this, &CameraInterface::captureRequestComplete);
     this->camera.reset();
 
     // for (auto &iter : this->mapped_capture_buffers)
