@@ -4,6 +4,7 @@
 #include <future>
 #include <memory>
 #include <string>
+#include <fmt/core.h>
 
 #include <libcamera/libcamera.h>
 #include <libcamera/pixel_format.h>
@@ -19,6 +20,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "ffmpeg_image_transport_msgs/msg/ffmpeg_packet.hpp"
+#include "sensor_msgs/msg/camera_info.hpp"
 
 class Encoder;
 
@@ -54,6 +56,9 @@ class CameraInterface {
             std::cerr << RED << oss.str() << CLR << std::endl;
             this->lines_printed = -1; // don't erase on err
         }
+        static std::string GetConfigPrefix(int location) {
+            return fmt::format("/camera_{}.", location);
+        }
 
     private:
         int lines_printed = 0;
@@ -61,6 +66,9 @@ class CameraInterface {
         std::shared_ptr<libcamera::Camera> camera;
 
         std::shared_ptr<PicamROS2> node;
+
+        bool publish_info;
+
         bool running = false;
         Encoder *encoder;
 
@@ -70,7 +78,11 @@ class CameraInterface {
         int64_t frameIdx = 0;
         
         rclcpp::Publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>::SharedPtr publisher;
+        rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr info_publisher;
         
+        ffmpeg_image_transport_msgs::msg::FFMPEGPacket out_frame_msg;
+        sensor_msgs::msg::CameraInfo out_info_msg;
+
         // uint out_buffer_count;
 
         long log_message_every_ns;
@@ -99,6 +111,7 @@ class CameraInterface {
         uint exposure_time;
         double analog_gain;
         bool awb_enable;
+        uint awb_mode;
         std::vector<double> color_gains; // [2]
         double brightness;
         double contrast;
@@ -116,7 +129,7 @@ class CameraInterface {
         std::map<FrameBuffer *, std::vector<AVBufferRef *>> mapped_capture_buffers;
         std::map<FrameBuffer *, std::vector<uint>> mapped_capture_buffer_strides;
 
-        ffmpeg_image_transport_msgs::msg::FFMPEGPacket outFrameMsg;
+        
 
         StreamConfiguration *streamConfig;
         void readConfig();

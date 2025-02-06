@@ -6,7 +6,7 @@
 #include <mutex>
 #include "encoder_base.hpp"
 
-class EncoderHW : Encoder {
+class EncoderHW : public Encoder {
     public:
         EncoderHW(CameraInterface *interface, std::shared_ptr<libcamera::Camera> camera);
         ~EncoderHW();

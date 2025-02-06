@@ -10,6 +10,7 @@ find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(ffmpeg_image_transport_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 find_library(AVCODEC_LIBRARY avcodec)
 find_library(AVUTIL_LIBRARY avutil)
@@ -28,7 +29,7 @@ add_executable(picam
               src/encoder_hw.cpp
               src/dma_heaps.cpp
               )
-ament_target_dependencies(picam rclcpp std_msgs ffmpeg_image_transport_msgs)
+ament_target_dependencies(picam rclcpp std_msgs sensor_msgs ffmpeg_image_transport_msgs)
 
 target_link_libraries(picam
   ${LIBCAMERA_LIBRARIES}

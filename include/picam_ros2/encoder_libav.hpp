@@ -25,7 +25,7 @@ extern "C" {
 
 using namespace libcamera;
 
-class EncoderLibAV : Encoder {
+class EncoderLibAV : public Encoder {
     public:
         EncoderLibAV(CameraInterface *interface, std::shared_ptr<libcamera::Camera> camera);
         ~EncoderLibAV();

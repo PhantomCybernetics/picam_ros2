@@ -26,7 +26,7 @@ PicamROS2::PicamROS2() : Node("picam_ros2"), count_(0)
 {
     this->declare_parameter("topic_prefix", "/picam_h264/camera_");
     this->declare_parameter("log_message_every_sec", 5.0); // -1.0 = off
-    this->declare_parameter("log_scroll", true);
+    this->declare_parameter("log_scroll", false);
 
     //   publisher_ = this->create_publisher<std_msgs::msg::String>("topic", 10);
     //   timer_ = this->create_wall_timer(1000ms, std::bind(&PicamROS2::timer_callback, this));
@@ -115,7 +115,16 @@ int main(int argc, char * argv[])
             rotation = props.get(properties::Rotation).value();
         }  
 
+        auto config_prefix = CameraInterface::GetConfigPrefix(location);
+
         std::cout << CYAN << "Found Cam ID=" << c->id() << ", Location=" << location << ", Rotation=" << rotation << "; Model=" << model << CLR << std::endl;
+
+        node->declare_parameter(config_prefix + "enabled", true); // on by default
+        auto enabled = node->get_parameter(config_prefix + "enabled").as_bool();
+        if (!enabled) {
+            std::cout << "Cam ID=" << c->id() << " at location=" << location << " disabled by config" << std::endl;
+            continue;
+        }
 
         auto cam_interface = std::make_shared<CameraInterface>(camera, location, rotation, model, node);
         camera_interfaces.push_back(cam_interface);

@@ -237,8 +237,6 @@ void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<
     
 }
 
-
-
 EncoderLibAV::~EncoderLibAV() {
     std::cout << BLUE << "Cleaning up sw encoder" << CLR << std::endl;
 

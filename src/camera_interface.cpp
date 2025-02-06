@@ -1,5 +1,4 @@
 #include <sys/mman.h>
-#include <fmt/core.h>
 #include <sys/ioctl.h>
 
 #include "picam_ros2/const.hpp"
@@ -23,8 +22,6 @@ CameraInterface::CameraInterface(std::shared_ptr<Camera> camera, int location, i
     this->rotation = rotation;
     this->model = model;
 }
-
-
 
 void CameraInterface::start() {
     if (this->running)
@@ -150,13 +147,21 @@ void CameraInterface::start() {
                 request->controls().set(libcamera::controls::AeMeteringMode, this->ae_metering_mode);
                 request->controls().set(libcamera::controls::AeConstraintMode, this->ae_constraint_mode);
                 request->controls().set(libcamera::controls::AeExposureMode, this->ae_exposure_mode);
-                
-            } else {
+                int64_t frameDurationMax = 1000000 / this->fps; // fps in microseconds
+                int64_t frameDurationMin = 1000000 / 60; // fps in microseconds
+                request->controls().set(libcamera::controls::FrameDurationLimits, {frameDurationMin, frameDurationMax});
+                // request->controls().set(libcamera::controls::ExposureTimeMode, libcamera::controls::ExposureTimeModeAuto);
+                // request->controls().set(libcamera::controls::AnalogueGainMode, libcamera::controls::AnalogueGainModeAuto);
+            } else if (this->exposure_time > 0.0f) {
                 request->controls().set(libcamera::controls::ExposureTime, this->exposure_time);
             }
+            
+            if (this->analog_gain > 0.0f) {
+                request->controls().set(libcamera::controls::AnalogueGain, this->analog_gain);
+            }
                 
-            request->controls().set(libcamera::controls::AnalogueGain, this->analog_gain);
             request->controls().set(libcamera::controls::AwbEnable, this->awb_enable);
+            request->controls().set(libcamera::controls::AwbMode, this->awb_mode);
             
             Span<const float, 2> color_gains({(float)this->color_gains[0], (float)this->color_gains[1]});
             request->controls().set(libcamera::controls::ColourGains, color_gains);
@@ -186,11 +191,36 @@ void CameraInterface::start() {
     std_msgs::msg::Header header;
     header.frame_id = this->frame_id;
     header.stamp = builtin_interfaces::msg::Time();
-    this->outFrameMsg.header = header;
-    this->outFrameMsg.width = this->width;
-    this->outFrameMsg.height = this->height;
-    this->outFrameMsg.encoding = "h.264";
-    this->outFrameMsg.is_bigendian = false;
+
+    this->out_frame_msg.header = header;
+    this->out_frame_msg.width = this->width;
+    this->out_frame_msg.height = this->height;
+    this->out_frame_msg.encoding = "h.264";
+    this->out_frame_msg.is_bigendian = false;
+
+    if (this->publish_info) {
+
+        std::string info_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}/camera_info", this->location, this->model);
+        this->log("Creatinng info publisher for ", info_topic);
+        auto info_qos = rclcpp::QoS(1);
+        this->info_publisher = this->node->create_publisher<sensor_msgs::msg::CameraInfo>(info_topic, info_qos);
+
+        this->out_info_msg.header = header;
+        this->out_info_msg.width = this->width;
+        this->out_info_msg.height = this->height;
+
+        //TODO: overwrite with calibration data
+        //this->out_info_msg.k = //np.ndarray(shape=(9,))
+        this->out_info_msg.k[0] = 516.0104370117188f;
+        this->out_info_msg.k[1] = 0.0f;
+        this->out_info_msg.k[2] = 328.4024963378906f;
+        this->out_info_msg.k[3] = 0.0f;
+        this->out_info_msg.k[4] = 516.0104370117188f;
+        this->out_info_msg.k[5] = 230.1466064453125f;
+        this->out_info_msg.k[6] = 0.0f;
+        this->out_info_msg.k[7] = 0.0f;
+        this->out_info_msg.k[8] = 1.0f;
+    }
 
     // std::shared_ptr<CameraInterface> sharedPtr(this, [](CameraInterface* ptr) {
     //     // Custom deleter that does nothing
@@ -231,7 +261,7 @@ void CameraInterface::start() {
 }
 
 void CameraInterface::captureRequestComplete(Request *request) {
-    if (request->status() == Request::RequestCancelled) {
+    if (!this->running || request->status() == Request::RequestCancelled) {
         return;
     }
 
@@ -326,18 +356,24 @@ void getCurrentStamp(builtin_interfaces::msg::Time *stamp, uint64_t timestamp_ns
 
 void CameraInterface::publish(unsigned char *data, int size, bool keyframe, uint64_t pts, long timestamp_ns, bool log) {
 
-    getCurrentStamp(&this->outFrameMsg.header.stamp, timestamp_ns);
-    this->outFrameMsg.pts = pts;
+    getCurrentStamp(&this->out_frame_msg.header.stamp, timestamp_ns);
+    this->out_frame_msg.pts = pts;
 
-    this->outFrameMsg.flags = keyframe ? 1 : 0;
-    this->outFrameMsg.data.assign(data, data + size);
+    this->out_frame_msg.flags = keyframe ? 1 : 0;
+    this->out_frame_msg.data.assign(data, data + size);
 
     if (log) {
-        this->log(GREEN, " >> Sending ", this->outFrameMsg.data.size(), "B", CLR, " sec: ", this->outFrameMsg.header.stamp.sec, " nsec: ", outFrameMsg.header.stamp.nanosec);
+        this->log(GREEN, " >> Sending ", this->out_frame_msg.data.size(), "B", CLR, " sec: ", this->out_frame_msg.header.stamp.sec, " nsec: ", out_frame_msg.header.stamp.nanosec);
     }
 
-    this->publisher->publish(this->outFrameMsg);
-
+    if (rclcpp::ok()) {
+        this->publisher->publish(this->out_frame_msg);
+        if (this->publish_info) {
+            this->out_info_msg.header.stamp.sec = this->out_frame_msg.header.stamp.sec;
+            this->out_info_msg.header.stamp.nanosec = this->out_frame_msg.header.stamp.nanosec;
+            this->info_publisher->publish(this->out_info_msg);
+        }
+    }
 }
 
 void CameraInterface::stop() {
@@ -613,8 +649,12 @@ void CameraInterface::stop() {
 // }
 
 void CameraInterface::readConfig() {
-    std::string config_prefix = fmt::format("/camera_{}.", this->location);
     
+    auto config_prefix = CameraInterface::GetConfigPrefix(this->location);
+
+    this->node->declare_parameter(config_prefix + "publish_info", true);
+    this->publish_info = this->node->get_parameter(config_prefix + "publish_info").as_bool();
+
     this->node->declare_parameter(config_prefix + "hflip", false);
     this->node->declare_parameter(config_prefix + "vflip", false);
     this->hflip = this->node->get_parameter(config_prefix + "hflip").as_bool();
@@ -631,9 +671,9 @@ void CameraInterface::readConfig() {
     this->node->declare_parameter(config_prefix + "bitrate", 4000000);
     this->bit_rate = this->node->get_parameter(config_prefix + "bitrate").as_int();
 
-    this->node->declare_parameter(config_prefix + "ae_enable", false);
+    this->node->declare_parameter(config_prefix + "ae_enable", true);
     this->ae_enable = this->node->get_parameter(config_prefix + "ae_enable").as_bool();
-    this->node->declare_parameter(config_prefix + "exposure_time_ns", 10000); // 10 ms
+    this->node->declare_parameter(config_prefix + "exposure_time_ns", 30000); // 10 ms, -1 = off
     this->exposure_time = (uint) this->node->get_parameter(config_prefix + "exposure_time_ns").as_int();
     this->node->declare_parameter(config_prefix + "ae_metering_mode", 0);
     this->ae_metering_mode = (uint) this->node->get_parameter(config_prefix + "ae_metering_mode").as_int();
@@ -659,10 +699,21 @@ void CameraInterface::readConfig() {
     // this->node->declare_parameter(config_prefix + "ae_constraint_mode_values", std::vector<double>{ 2.0f, 1.8f });
     // this->ae_constraint_mode_values = this->node->get_parameter(config_prefix + "ae_constraint_mode_values").as_double_array();
 
-    this->node->declare_parameter(config_prefix + "analog_gain", 1.5f); // sensor gain
+    this->node->declare_parameter(config_prefix + "analog_gain", -1.0); // sensor gain, -1.0 = auto 
     this->analog_gain = this->node->get_parameter(config_prefix + "analog_gain").as_double();
     this->node->declare_parameter(config_prefix + "awb_enable", true);
     this->awb_enable = this->node->get_parameter(config_prefix + "awb_enable").as_bool();
+    this->node->declare_parameter(config_prefix + "awb_mode", 0);
+    this->awb_mode = (uint) this->node->get_parameter(config_prefix + "awb_mode").as_int();
+    // AwbAuto = 0,
+	// AwbIncandescent = 1,
+	// AwbTungsten = 2,
+	// AwbFluorescent = 3,
+	// AwbIndoor = 4,
+	// AwbDaylight = 5,
+	// AwbCloudy = 6,
+	// AwbCustom = 7,
+
     this->node->declare_parameter(config_prefix + "color_gains", std::vector<double>{ 2.0f, 1.8f });
     this->color_gains = this->node->get_parameter(config_prefix + "color_gains").as_double_array();
     
@@ -714,22 +765,29 @@ void CameraInterface::readConfig() {
 
 CameraInterface::~CameraInterface() {
     std::cout << BLUE << "Cleaning up " << this->model << " interface" << CLR << std::endl;
+    this->running = false;
 
-    this->camera->stop();
-    this->camera->release();
-    this->camera->requestCompleted.disconnect(this, &CameraInterface::captureRequestComplete);
-    this->camera.reset();
+    try {
+        this->camera->stop();
+        this->camera->release();
+        this->camera->requestCompleted.disconnect(this, &CameraInterface::captureRequestComplete);
+        this->camera.reset();
 
-    // for (auto &iter : this->mapped_capture_buffers)
-	// {
-	// 	assert(iter.first->planes().size() == iter.second.size());
-	// 	for (unsigned i = 0; i < iter.first->planes().size(); i++)
-	// 	for (auto &span : iter.second)
-	// 		munmap(span.data(), span.size());
-	// }
-	this->mapped_capture_buffers.clear();
-	this->capture_frame_buffers.clear();
+        // for (auto &iter : this->mapped_capture_buffers)
+        // {
+        // 	assert(iter.first->planes().size() == iter.second.size());
+        // 	for (unsigned i = 0; i < iter.first->planes().size(); i++)
+        // 	for (auto &span : iter.second)
+        // 		munmap(span.data(), span.size());
+        // }
+        this->mapped_capture_buffers.clear();
+        this->capture_frame_buffers.clear();
+    } catch (...) {
+        std::cout << "Error cleaning up interface" << std::endl;
+    }
     
+    delete this->encoder;
+
     this->camera = NULL;
     this->node = NULL;
 }
