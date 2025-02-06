@@ -8,6 +8,7 @@
                 "/opt/ros/humble/include/**",
                 "/opt/ros/humble/include/ffmpeg_image_transport_msgs/**",
                 "/opt/ros/humble/include/sensor_msgs/**",
+                "/opt/ros/humble/include/std_srvs/**",
                 "/usr/local/include/libcamera/"
             ],
             "defines": [],
