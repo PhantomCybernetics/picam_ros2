@@ -188,8 +188,11 @@ void EncoderHW::encode(std::vector<AVBufferRef *>, std::vector<uint>, int base_f
 		// We need to find an available output buffer (input to the codec) to
 		// "wrap" the DMABUF.
 		std::lock_guard<std::mutex> lock(this->input_buffers_available_mutex);
-		if (this->input_buffers_available.empty())
-			throw std::runtime_error("no buffers available to queue codec input");
+		if (this->input_buffers_available.empty()) {
+			this->interface->err("No buffers available to queue codec input");
+			return;
+		}
+			
 		index = this->input_buffers_available.front();
 		this->input_buffers_available.pop();
 	}

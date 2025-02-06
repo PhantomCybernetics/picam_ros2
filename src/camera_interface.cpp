@@ -70,7 +70,9 @@ void CameraInterface::start() {
     this->log(YELLOW, "Exposure time: ", this->exposure_time, " ns"); 
     this->log(YELLOW, "Analogue gain: ", this->analog_gain); 
     this->log(YELLOW, "Auto white balance enabled: ", this->awb_enable); 
-    this->log(YELLOW, "Color gains: {", this->color_gains[0], ", ", this->color_gains[1], "}"); 
+    this->log(YELLOW, "Auto white balance mode: ", this->awb_mode); 
+    // this->log(YELLOW, "Auto white balance locked: ", this->awb_locked); 
+    //this->log(YELLOW, "Color gains: {", this->color_gains[0], ", ", this->color_gains[1], "}"); 
     this->log(YELLOW, "Brightness: ", this->brightness); 
     this->log(YELLOW, "Contrast: ", this->contrast); 
     this->camera->configure(config.get());
@@ -147,15 +149,16 @@ void CameraInterface::start() {
                 request->controls().set(libcamera::controls::ExposureTime, this->exposure_time);
             }
             
-            if (this->analog_gain > 0.0f) {
-                request->controls().set(libcamera::controls::AnalogueGain, this->analog_gain);
-            }
+            request->controls().set(libcamera::controls::AnalogueGain, this->analog_gain);
                 
             request->controls().set(libcamera::controls::AwbEnable, this->awb_enable);
-            request->controls().set(libcamera::controls::AwbMode, this->awb_mode);
+            if (this->awb_enable) {
+                request->controls().set(libcamera::controls::AwbMode, this->awb_mode);
+                // request->controls().set(libcamera::controls::AwbLocked, this->awb_locked);
+            }
             
-            Span<const float, 2> color_gains({(float)this->color_gains[0], (float)this->color_gains[1]});
-            request->controls().set(libcamera::controls::ColourGains, color_gains);
+            //Span<const float, 2> color_gains({(float)this->color_gains[0], (float)this->color_gains[1]});
+            //request->controls().set(libcamera::controls::ColourGains, color_gains);
             request->controls().set(libcamera::controls::Brightness, this->brightness);
             request->controls().set(libcamera::controls::Contrast, this->contrast);
 
@@ -478,10 +481,12 @@ void CameraInterface::readConfig() {
     // this->node->declare_parameter(config_prefix + "ae_constraint_mode_values", std::vector<double>{ 2.0f, 1.8f });
     // this->ae_constraint_mode_values = this->node->get_parameter(config_prefix + "ae_constraint_mode_values").as_double_array();
 
-    this->node->declare_parameter(config_prefix + "analog_gain", -1.0); // sensor gain, -1.0 = auto 
+    this->node->declare_parameter(config_prefix + "analog_gain", 1.0); // sensor gain
     this->analog_gain = this->node->get_parameter(config_prefix + "analog_gain").as_double();
     this->node->declare_parameter(config_prefix + "awb_enable", true);
     this->awb_enable = this->node->get_parameter(config_prefix + "awb_enable").as_bool();
+    // this->node->declare_parameter(config_prefix + "awb_locked", false);
+    // this->awb_locked = this->node->get_parameter(config_prefix + "awb_locked").as_bool();
     this->node->declare_parameter(config_prefix + "awb_mode", 0);
     this->awb_mode = (uint) this->node->get_parameter(config_prefix + "awb_mode").as_int();
     // AwbAuto = 0,
@@ -493,8 +498,8 @@ void CameraInterface::readConfig() {
 	// AwbCloudy = 6,
 	// AwbCustom = 7,
 
-    this->node->declare_parameter(config_prefix + "color_gains", std::vector<double>{ 2.0f, 1.8f });
-    this->color_gains = this->node->get_parameter(config_prefix + "color_gains").as_double_array();
+    // this->node->declare_parameter(config_prefix + "color_gains", std::vector<double>{ 2.0f, 1.8f });
+    // this->color_gains = this->node->get_parameter(config_prefix + "color_gains").as_double_array();
     
     this->node->declare_parameter(config_prefix + "brightness", 0.2f);
     this->brightness = this->node->get_parameter(config_prefix + "brightness").as_double();

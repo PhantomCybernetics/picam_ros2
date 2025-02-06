@@ -115,6 +115,7 @@ class CameraInterface {
         uint exposure_time;
         double analog_gain;
         bool awb_enable;
+        // bool awb_locked;
         uint awb_mode;
         std::vector<double> color_gains; // [2]
         double brightness;
