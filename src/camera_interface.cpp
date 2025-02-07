@@ -3,6 +3,7 @@
 
 #include "picam_ros2/const.hpp"
 #include "picam_ros2/camera_interface.hpp"
+#include "picam_ros2/calibration.hpp"
 
 using namespace libcamera;
 
@@ -245,81 +246,9 @@ void CameraInterface::start() {
 
 }
 
-void CameraInterface::calibration_toggle(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-                                                std::shared_ptr<std_srvs::srv::SetBool::Response> response)
-{
-    if (this->calibration_running && request->data) {
-        response->success = false;
-        response->message = "Calibration already running";
-        return;
-    } else if (!this->calibration_running && !request->data) {
-        response->success = false;
-        response->message = "Calibration not running";
-        return;
-    }
-    this->calibration_running = request->data;
-
-    response->success = true;
-    if (this->calibration_running) {
-        this->calibration_sampled_frames = 0;
-        response->message = "Calibration started";
-        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCalibration started for %s at location %d%s", CYAN.c_str(), this->model.c_str(), this->location, CLR.c_str());
-    } else {
-        response->message = "Calibration stopped";
-        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCalibration stopped for %s at location %d%s", RED.c_str(), this->model.c_str(), this->location, CLR.c_str());
-    }
-    this->lines_printed = -1;
-}
-
-void CameraInterface::calibration_sample_frame(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-                                               std::shared_ptr<std_srvs::srv::Trigger::Response> response)
-{
-    if (!this->calibration_running) {
-        response->success = false;
-        response->message = "Calibration not running";
-        return;
-    }
-
-    this->calibration_sampled_frames++;
-    
-    response->success = true;
-    response->message = "Frame sampled";
-    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sFrame #%d sampled for %s at location %d%s", CYAN.c_str(), this->calibration_sampled_frames, this->model.c_str(), this->location, CLR.c_str());
-    this->lines_printed = -1;
-
-    if (this->calibration_sampled_frames == this->needed_calibration_frames) {
-        this->calibration_running = false;
-        response->message = "Frame sampled, calibration finished";
-        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sProcessing calibration  for %s at location %d%s", MAGENTA.c_str(), this->model.c_str(), this->location, CLR.c_str());
-        this->lines_printed = -1;
-    }
-}
-
-void CameraInterface::calibration_save(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-                                               std::shared_ptr<std_srvs::srv::Trigger::Response> response)
-{
-    response->success = true;
-    response->message = "Calibration saved";
-    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCalibration saved for %s at location %d%s", GREEN.c_str(), this->model.c_str(), this->location, CLR.c_str());
-    this->lines_printed = -1;
-}
-
 void CameraInterface::captureRequestComplete(Request *request) {
     if (!this->running || request->status() == Request::RequestCancelled) {
         return;
-    }
-
-    bool log = false;
-    auto now = std::chrono::high_resolution_clock::now();
-    auto ns_since_epoch = std::chrono::duration_cast<std::chrono::nanoseconds>(
-        now.time_since_epoch()
-    ).count();
-
-    if (this->log_message_every_ns > -1) {        
-        if (ns_since_epoch - this->last_log >= this->log_message_every_ns) {
-            this->last_log = ns_since_epoch;
-            log = true;
-        }
     }
 
     const std::map<const Stream *, FrameBuffer *> &request_buffers = request->buffers();
@@ -338,6 +267,19 @@ void CameraInterface::captureRequestComplete(Request *request) {
         int ret_start = ::ioctl(base_fd, DMA_BUF_IOCTL_SYNC, &dma_sync_start);
 		if (ret_start)
 		    throw std::runtime_error("Failed to sync/start dma buf on queue request");
+        
+        bool log = false;
+        auto now = std::chrono::high_resolution_clock::now();
+        auto ns_since_epoch = std::chrono::duration_cast<std::chrono::nanoseconds>(
+            now.time_since_epoch()
+        ).count();
+
+        if (this->log_message_every_ns > -1) {        
+            if (ns_since_epoch - this->last_log >= this->log_message_every_ns) {
+                this->last_log = ns_since_epoch;
+                log = true;
+            }
+        }
 
         std::time_t current_time = std::time(nullptr);
         if (current_time - this->last_fps_time >= 1.0) {
@@ -380,9 +322,19 @@ void CameraInterface::captureRequestComplete(Request *request) {
         if (log) {
             std::cout << std::endl;
             this->lines_printed++;
-         }
+        }
 
         this->encoder->encode(plane_buffers, plane_strides, base_fd, this->buffer_size, &this->frameIdx, timestamp_ns, log);
+
+        if (this->calibration_running
+            && this->calibration_frames.size() < this->calibration_frames_requested
+            && ns_since_epoch-last_calibration_frame_taken_ns > calibration_min_frame_delay_ns)
+        {
+            last_calibration_frame_taken_ns = ns_since_epoch;
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCapturing frame #%lu from %s at location %d%s", GREEN.c_str(), this->calibration_frames.size(), this->model.c_str(), this->location, CLR.c_str());
+            this->calibration_frames.push_back(yuv420ToRgbCopy(plane_buffers, plane_strides, this->width, this->height));
+            // cv::imwrite(fmt::format("/ros2_ws/img_snaps/frame_{}.png", ns_since_epoch), this->calibration_frames.back());
+        }
     }
 
     if (!this->running)
@@ -391,6 +343,7 @@ void CameraInterface::captureRequestComplete(Request *request) {
     request->reuse(Request::ReuseBuffers);
     this->camera->queueRequest(request);
 }
+
 
 void getCurrentStamp(builtin_interfaces::msg::Time *stamp, uint64_t timestamp_ns) {
     // Split into seconds and nanoseconds
@@ -424,7 +377,6 @@ void CameraInterface::stop() {
     if (!this->running)
         return;
     this->running = false;
-
 }
 
 void CameraInterface::readConfig() {
@@ -436,6 +388,8 @@ void CameraInterface::readConfig() {
 
     this->node->declare_parameter(config_prefix + "enable_calibration", true);
     this->enable_calibration = this->node->get_parameter(config_prefix + "enable_calibration").as_bool();
+    this->node->declare_parameter(config_prefix + "calibration_frames_needed", 10);
+    calibration_frames_needed = (uint) this->node->get_parameter(config_prefix + "calibration_frames_needed").as_int();
 
     this->node->declare_parameter(config_prefix + "hflip", false);
     this->node->declare_parameter(config_prefix + "vflip", false);
@@ -522,9 +476,73 @@ void CameraInterface::readConfig() {
     this->log_message_every_ns = (long) (this->node->get_parameter("log_message_every_sec").as_double() * NS_TO_SEC);
 }
 
+void CameraInterface::calibration_toggle(const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                                                std::shared_ptr<std_srvs::srv::SetBool::Response> response)
+{
+    if (this->calibration_running && request->data) {
+        response->success = false;
+        response->message = "Calibration already running";
+        return;
+    } else if (!this->calibration_running && !request->data) {
+        response->success = false;
+        response->message = "Calibration not running";
+        return;
+    }
+    this->calibration_running = request->data;
+
+    response->success = true;
+    if (this->calibration_running) {
+        this->calibration_frames_requested = 0;
+        this->calibration_frames.clear();
+        this->last_calibration_frame_taken_ns = 0;
+        response->message = "Calibration started";
+        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCalibration started for %s at location %d%s", CYAN.c_str(), this->model.c_str(), this->location, CLR.c_str());
+    } else {
+        response->message = "Calibration stopped";
+        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCalibration stopped for %s at location %d%s", RED.c_str(), this->model.c_str(), this->location, CLR.c_str());
+    }
+    this->lines_printed = -1;
+}
+
+void CameraInterface::calibration_sample_frame(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+                                               std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+    if (!this->calibration_running) {
+        response->success = false;
+        response->message = "Calibration not running";
+        return;
+    }
+    if (this->calibration_frames_requested >= this->calibration_frames_needed) {
+        response->success = false;
+        response->message = "Enough frames collected";
+        return;
+    }
+
+    this->calibration_frames_requested++;
+    
+    response->success = true;
+    response->message = "Frame sampled";
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sFrame #%d sampled for %s at location %d%s", CYAN.c_str(), this->calibration_frames_requested, this->model.c_str(), this->location, CLR.c_str());
+    this->lines_printed = -1;
+    
+    if (this->calibration_frames_requested == this->calibration_frames_needed) {
+        response->message = "Frame sampled, processing calibration...";
+        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sProcessing calibration  for %s at location %d%s", MAGENTA.c_str(), this->model.c_str(), this->location, CLR.c_str());
+        this->lines_printed = -1;
+    }
+}
+
+void CameraInterface::calibration_save(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+                                               std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+    response->success = true;
+    response->message = "Calibration saved";
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCalibration saved for %s at location %d%s", GREEN.c_str(), this->model.c_str(), this->location, CLR.c_str());
+    this->lines_printed = -1;
+}
+
 CameraInterface::~CameraInterface() {
     std::cout << BLUE << "Cleaning up " << this->model << " interface" << CLR << std::endl;
     this->running = false;
+    this->calibration_running = false;
 
     try {
         this->camera->stop();
@@ -546,7 +564,7 @@ CameraInterface::~CameraInterface() {
     }
     
     delete this->encoder;
-
+    this->calibration_frames.clear();
     this->camera = NULL;
     this->node = NULL;
 }

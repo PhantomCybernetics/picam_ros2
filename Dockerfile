@@ -44,6 +44,7 @@ RUN apt install -y libgnutls28-dev openssl libtiff-dev pybind11-dev
 RUN apt install -y python3-yaml python3-ply
 RUN apt install -y libglib2.0-dev libgstreamer-plugins-base1.0-dev
 RUN apt install -y ninja-build pkg-config
+RUN apt install -y --no-install-recommends libopencv-dev
 
 # RUN echo "export PATH=\$PATH:/root/.local/bin" >> /root/.bashrc
 ENV PATH=$PATH":/root/.local/bin"

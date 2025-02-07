@@ -6,6 +6,8 @@
 #include <string>
 #include <fmt/core.h>
 
+#include <opencv2/opencv.hpp>
+
 #include <libcamera/libcamera.h>
 #include <libcamera/pixel_format.h>
 #include <libcamera/transform.h>
@@ -71,7 +73,6 @@ class CameraInterface {
         std::shared_ptr<PicamROS2> node;
 
         bool publish_info;
-        bool enable_calibration, calibration_running = false;
 
         bool running = false;
         Encoder *encoder;
@@ -134,14 +135,18 @@ class CameraInterface {
         std::map<FrameBuffer *, std::vector<AVBufferRef *>> mapped_capture_buffers;
         std::map<FrameBuffer *, std::vector<uint>> mapped_capture_buffer_strides;
 
+        bool enable_calibration, calibration_running = false;
         void calibration_toggle(const std::shared_ptr<std_srvs::srv::SetBool::Request> request, std::shared_ptr<std_srvs::srv::SetBool::Response> response);
         void calibration_sample_frame(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response);
         void calibration_save(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response);
         std::shared_ptr<rclcpp::Service<std_srvs::srv::SetBool>> srv_calibration_toggle;
         std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> srv_calibration_sample_frame;
         std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> srv_calibration_save;
-        uint calibration_sampled_frames;
-        const uint needed_calibration_frames = 10;
+        uint calibration_frames_requested;
+        uint calibration_frames_needed;
+        long last_calibration_frame_taken_ns = 0;
+        const uint calibration_min_frame_delay_ns = 1000;
+        std::vector<cv::Mat> calibration_frames;
 
         StreamConfiguration *streamConfig;
         void readConfig();
