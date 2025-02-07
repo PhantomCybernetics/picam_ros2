@@ -12,4 +12,5 @@ extern "C" {
 #include "sensor_msgs/msg/camera_info.hpp"
 
 cv::Mat yuv420ToRgbCopy(const std::vector<AVBufferRef *>& planes, const std::vector<unsigned int>& strides, uint width, uint height);
-sensor_msgs::msg::CameraInfo calibrateCamera(const std::vector<cv::Mat>& images, cv::Size patternSize, float squareSize);
+void calibrateCamera(const std::vector<cv::Mat>& images, cv::Size pattern_size, float square_size, sensor_msgs::msg::CameraInfo& camera_info);
+cv::Mat yuv420ToMonoCopy(const std::vector<AVBufferRef *>& planes, const std::vector<unsigned int>& strides, uint width, uint height);

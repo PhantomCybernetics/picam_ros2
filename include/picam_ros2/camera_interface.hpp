@@ -147,6 +147,8 @@ class CameraInterface {
         long last_calibration_frame_taken_ns = 0;
         const uint calibration_min_frame_delay_ns = 1000;
         std::vector<cv::Mat> calibration_frames;
+        cv::Size calibration_pattern_size;
+        float calibration_square_size;
 
         StreamConfiguration *streamConfig;
         void readConfig();

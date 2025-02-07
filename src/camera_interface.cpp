@@ -206,15 +206,15 @@ void CameraInterface::start() {
 
         //TODO: overwrite with real calibration data
         //this->out_info_msg.k = //np.ndarray(shape=(9,))
-        this->out_info_msg.k[0] = 516.0104370117188f;
-        this->out_info_msg.k[1] = 0.0f;
-        this->out_info_msg.k[2] = 328.4024963378906f;
-        this->out_info_msg.k[3] = 0.0f;
-        this->out_info_msg.k[4] = 516.0104370117188f;
-        this->out_info_msg.k[5] = 230.1466064453125f;
-        this->out_info_msg.k[6] = 0.0f;
-        this->out_info_msg.k[7] = 0.0f;
-        this->out_info_msg.k[8] = 1.0f;
+        // this->out_info_msg.k[0] = 0.0f;
+        // this->out_info_msg.k[1] = 0.0f;
+        // this->out_info_msg.k[2] = 0.0f;
+        // this->out_info_msg.k[3] = 0.0f;
+        // this->out_info_msg.k[4] = 0.0f;
+        // this->out_info_msg.k[5] = 0.0f;
+        // this->out_info_msg.k[6] = 0.0f;
+        // this->out_info_msg.k[7] = 0.0f;
+        // this->out_info_msg.k[8] = 0.0f;
     }
 
     if (this->enable_calibration) {
@@ -332,8 +332,18 @@ void CameraInterface::captureRequestComplete(Request *request) {
         {
             last_calibration_frame_taken_ns = ns_since_epoch;
             RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCapturing frame #%lu from %s at location %d%s", GREEN.c_str(), this->calibration_frames.size(), this->model.c_str(), this->location, CLR.c_str());
-            this->calibration_frames.push_back(yuv420ToRgbCopy(plane_buffers, plane_strides, this->width, this->height));
-            // cv::imwrite(fmt::format("/ros2_ws/img_snaps/frame_{}.png", ns_since_epoch), this->calibration_frames.back());
+            this->lines_printed = -1;
+            this->calibration_frames.push_back(yuv420ToMonoCopy(plane_buffers, plane_strides, this->width, this->height));
+            //cv::imwrite(fmt::format("/ros2_ws/img_snaps/frame_mono_{}.png", ns_since_epoch), this->calibration_frames.back());
+
+            if (this->calibration_frames.size() == this->calibration_frames_needed) {
+                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sProcessing calibration  for %s at location %d%s", MAGENTA.c_str(), this->model.c_str(), this->location, CLR.c_str());
+                calibrateCamera(this->calibration_frames, this->calibration_pattern_size, this->calibration_square_size, this->out_info_msg);
+                this->calibration_running = false;
+                this->calibration_frames.clear();
+                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCalibration complete for %s at location %d%s", MAGENTA.c_str(), this->model.c_str(), this->location, CLR.c_str());
+                this->lines_printed = -1;
+            }
         }
     }
 
@@ -388,8 +398,12 @@ void CameraInterface::readConfig() {
 
     this->node->declare_parameter(config_prefix + "enable_calibration", true);
     this->enable_calibration = this->node->get_parameter(config_prefix + "enable_calibration").as_bool();
-    this->node->declare_parameter(config_prefix + "calibration_frames_needed", 10);
-    calibration_frames_needed = (uint) this->node->get_parameter(config_prefix + "calibration_frames_needed").as_int();
+
+
+    calibration_frames_needed = (uint) this->node->get_parameter("calibration_frames_needed").as_int();
+    auto calibration_pattern_size = this->node->get_parameter("calibration_pattern_size").as_integer_array();
+    this->calibration_pattern_size = { (int)calibration_pattern_size[0], (int)calibration_pattern_size[1] };
+    this->calibration_square_size = this->node->get_parameter("calibration_square_size_m").as_double();
 
     this->node->declare_parameter(config_prefix + "hflip", false);
     this->node->declare_parameter(config_prefix + "vflip", false);
@@ -520,14 +534,12 @@ void CameraInterface::calibration_sample_frame(const std::shared_ptr<std_srvs::s
     this->calibration_frames_requested++;
     
     response->success = true;
-    response->message = "Frame sampled";
+    response->message = fmt::format("Capturing frame {} of {}", this->calibration_frames_requested, this->calibration_frames_needed);
     RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sFrame #%d sampled for %s at location %d%s", CYAN.c_str(), this->calibration_frames_requested, this->model.c_str(), this->location, CLR.c_str());
     this->lines_printed = -1;
     
     if (this->calibration_frames_requested == this->calibration_frames_needed) {
-        response->message = "Frame sampled, processing calibration...";
-        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sProcessing calibration  for %s at location %d%s", MAGENTA.c_str(), this->model.c_str(), this->location, CLR.c_str());
-        this->lines_printed = -1;
+        response->message = fmt::format("Captured {} frames, processing calibration...", this->calibration_frames_requested);
     }
 }
 

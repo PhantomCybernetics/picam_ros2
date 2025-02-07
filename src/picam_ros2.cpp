@@ -27,6 +27,9 @@ PicamROS2::PicamROS2() : Node("picam_ros2"), count_(0)
     this->declare_parameter("topic_prefix", "/picam_h264/camera_");
     this->declare_parameter("log_message_every_sec", 5.0); // -1.0 = off
     this->declare_parameter("log_scroll", false);
+    this->declare_parameter("calibration_frames_needed", 10);
+    this->declare_parameter("calibration_pattern_size", std::vector<int>{ 9, 6 } );
+    this->declare_parameter("calibration_square_size_m", 0.019f );
 
     //   publisher_ = this->create_publisher<std_msgs::msg::String>("topic", 10);
     //   timer_ = this->create_wall_timer(1000ms, std::bind(&PicamROS2::timer_callback, this));
