@@ -22,6 +22,7 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "ffmpeg_image_transport_msgs/msg/ffmpeg_packet.hpp"
+#include "sensor_msgs/msg/image.hpp"
 #include "sensor_msgs/msg/camera_info.hpp"
 
 #include "std_srvs/srv/set_bool.hpp"
@@ -36,7 +37,10 @@ class CameraInterface {
         CameraInterface(std::shared_ptr<Camera> camera, int location, int rotation, std::string model, std::shared_ptr<PicamROS2> node);
         void start();
         void stop();
-        void publish(unsigned char *data, int size, bool keyframe, uint64_t pts, long timestamp_ns, bool log);
+        void publishH264(unsigned char *data, int size, bool keyframe, uint64_t pts, long timestamp_ns, bool log);
+        void publishImage(const std::vector<AVBufferRef *>& planes, const std::vector<unsigned int>& strides, uint buffer_size, long timestamp_ns, bool log);
+        void publishCameraInfo(long timestamp_ns, bool log);
+
         ~CameraInterface();
 
         uint width;
@@ -72,7 +76,14 @@ class CameraInterface {
 
         std::shared_ptr<PicamROS2> node;
 
+        bool publish_h264;
+        bool publish_image;
+        uint image_output_format;
         bool publish_info;
+
+        std::string h264_topic;
+        std::string info_topic;
+        std::string image_topic;
 
         bool running = false;
         Encoder *encoder;
@@ -80,12 +91,14 @@ class CameraInterface {
         std::vector<std::unique_ptr<Request>> capture_requests;
         
         size_t buffer_size; // whole buffer aligned to 4096
-        int64_t frameIdx = 0;
+        int64_t frame_idx = 0;
         
-        rclcpp::Publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>::SharedPtr publisher;
+        rclcpp::Publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>::SharedPtr h264_publisher;
+        rclcpp::Publisher<sensor_msgs::msg::Image>::SharedPtr image_publisher;
         rclcpp::Publisher<sensor_msgs::msg::CameraInfo>::SharedPtr info_publisher;
         
-        ffmpeg_image_transport_msgs::msg::FFMPEGPacket out_frame_msg;
+        ffmpeg_image_transport_msgs::msg::FFMPEGPacket out_h264_msg;
+        sensor_msgs::msg::Image out_image_msg;
         sensor_msgs::msg::CameraInfo out_info_msg;
 
         // uint out_buffer_count;

@@ -232,7 +232,7 @@ void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<
                                     codec_context->time_base,
                                     AVRational{1, 90000});
         bool keyframe = !!(this->encoded_packet->flags & AV_PKT_FLAG_KEY);
-        this->interface->publish(this->encoded_packet->data, this->encoded_packet->size, keyframe, pts, timestamp_ns, log);
+        this->interface->publishH264(this->encoded_packet->data, this->encoded_packet->size, keyframe, pts, timestamp_ns, log);
     }
     
 }

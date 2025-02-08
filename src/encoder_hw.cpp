@@ -293,7 +293,7 @@ void EncoderHW::pollThread()
                                     		AVRational{1, (int)this->interface->fps},
                                     		AVRational{1, 90000});
 				
-				this->interface->publish((unsigned char*) this->hw_buffers[buf.index].mem, buf.m.planes[0].bytesused, keyframe, pts, timestamp_ns, log);
+				this->interface->publishH264((unsigned char*) this->hw_buffers[buf.index].mem, buf.m.planes[0].bytesused, keyframe, pts, timestamp_ns, log);
 				
 				// OutputItem item = { buffers_[buf.index].mem,
 				// 					buf.m.planes[0].bytesused,

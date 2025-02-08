@@ -24,7 +24,7 @@ using namespace std::chrono_literals;
 
 PicamROS2::PicamROS2() : Node("picam_ros2"), count_(0)
 {
-    this->declare_parameter("topic_prefix", "/picam_h264/camera_");
+    this->declare_parameter("topic_prefix", "/picam_ros2/camera_");
     this->declare_parameter("log_message_every_sec", 5.0); // -1.0 = off
     this->declare_parameter("log_scroll", false);
     this->declare_parameter("calibration_frames_needed", 10);

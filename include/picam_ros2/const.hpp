@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <map>
 
 const std::string RED = "\033[31m";
 const std::string GREEN = "\033[32m";
@@ -12,3 +13,15 @@ const std::string WHITE = "\033[37m2";
 const std::string CLR = "\033[0m";
 
 const int NS_TO_SEC = 1000000000;
+
+enum IMAGE_OUTPUT_FORMAT : uint {
+  BGR8,
+  YUV420,
+  MONO8
+};
+
+const std::map<uint, std::string> IMAGE_OUTPUT_FORMAT_NAMES = {
+  { IMAGE_OUTPUT_FORMAT::BGR8, "bgr8" },
+  { IMAGE_OUTPUT_FORMAT::YUV420, "yuv420" },
+  { IMAGE_OUTPUT_FORMAT::MONO8, "mono8" },
+};

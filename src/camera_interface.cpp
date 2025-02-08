@@ -61,6 +61,21 @@ void CameraInterface::start() {
 
     this->stride = this->streamConfig->stride;
 
+    if (this->publish_h264)
+        this->log(GREEN, "Publishing as H.264 topic: ", this->h264_topic); 
+    else
+        this->log(BLUE, "Not publishing as H.264 topic"); 
+    
+    if (this->publish_image)
+        this->log(GREEN, "Publishing as Image topic (", IMAGE_OUTPUT_FORMAT_NAMES.at(this->image_output_format), "): ", this->image_topic); 
+    else
+        this->log(BLUE, "Not publishing as Image topic"); 
+
+    if (this->publish_info)
+        this->log(GREEN, "Publishing CameraInfo: ", this->info_topic);
+    else
+        this->log(BLUE, "Not publishing CameraInfo");
+
     this->log(YELLOW, "Camera orinetation: ", config->orientation); 
     this->log(YELLOW, "Stream config: ", this->streamConfig->toString()); 
     this->log(YELLOW, "Stride: ", this->streamConfig->stride); 
@@ -177,30 +192,44 @@ void CameraInterface::start() {
     }
 
     // init ros frame publisher
-    std::string topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}", this->location, this->model);
-    this->log("Creatinng publisher for ", topic);
-    auto qos = rclcpp::QoS(1);
-    this->publisher = this->node->create_publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>(topic, qos);
     
-    // init output msg
-    std_msgs::msg::Header header;
-    header.frame_id = this->frame_id;
-    header.stamp = builtin_interfaces::msg::Time();
+    if (this->publish_h264) {
+        this->log("Creating H.264 publisher for ", this->h264_topic);
+        auto h264_qos = rclcpp::QoS(1);
+        h264_qos.best_effort();
+        h264_qos.durability_volatile();
+        this->h264_publisher = this->node->create_publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>(this->h264_topic, h264_qos);
+        
+        this->out_h264_msg.header.frame_id = this->frame_id;
+        this->out_h264_msg.width = this->width;
+        this->out_h264_msg.height = this->height;
+        this->out_h264_msg.encoding = "h.264";
+        this->out_h264_msg.is_bigendian = false;
+    }
 
-    this->out_frame_msg.header = header;
-    this->out_frame_msg.width = this->width;
-    this->out_frame_msg.height = this->height;
-    this->out_frame_msg.encoding = "h.264";
-    this->out_frame_msg.is_bigendian = false;
+    if (this->publish_image) {
+
+        this->log("Creating Image publisher for ", this->image_topic);
+        auto image_qos = rclcpp::QoS(1);
+        image_qos.best_effort();
+        image_qos.durability_volatile();
+        this->image_publisher = this->node->create_publisher<sensor_msgs::msg::Image>(this->image_topic, image_qos);
+        
+        this->out_image_msg.header.frame_id = this->frame_id;
+        this->out_image_msg.width = this->width;
+        this->out_image_msg.height = this->height;
+        this->out_image_msg.encoding = IMAGE_OUTPUT_FORMAT_NAMES.at(this->image_output_format);
+        this->out_image_msg.is_bigendian = false;
+    }
 
     if (this->publish_info) {
-
-        std::string info_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}/camera_info", this->location, this->model);
-        this->log("Creatinng info publisher for ", info_topic);
+        this->log("Creating CameraInfo publisher for ", this->info_topic);
         auto info_qos = rclcpp::QoS(1);
-        this->info_publisher = this->node->create_publisher<sensor_msgs::msg::CameraInfo>(info_topic, info_qos);
+        info_qos.best_effort();
+        info_qos.durability_volatile();
+        this->info_publisher = this->node->create_publisher<sensor_msgs::msg::CameraInfo>(this->info_topic, info_qos);
 
-        this->out_info_msg.header = header;
+        this->out_info_msg.header.frame_id = this->frame_id;
         this->out_info_msg.width = this->width;
         this->out_info_msg.height = this->height;
 
@@ -209,18 +238,6 @@ void CameraInterface::start() {
         } else {
             RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to load calibration file %s; camera uncalibrated", this->calibration_file.c_str());
         }
-
-        //TODO: overwrite with real calibration data
-        //this->out_info_msg.k = //np.ndarray(shape=(9,))
-        // this->out_info_msg.k[0] = 0.0f;
-        // this->out_info_msg.k[1] = 0.0f;
-        // this->out_info_msg.k[2] = 0.0f;
-        // this->out_info_msg.k[3] = 0.0f;
-        // this->out_info_msg.k[4] = 0.0f;
-        // this->out_info_msg.k[5] = 0.0f;
-        // this->out_info_msg.k[6] = 0.0f;
-        // this->out_info_msg.k[7] = 0.0f;
-        // this->out_info_msg.k[8] = 0.0f;
     }
 
     if (this->enable_calibration) {
@@ -237,10 +254,12 @@ void CameraInterface::start() {
     // });
 
     // create the encoder
-    if (this->hw_encoder) {
-        this->encoder = (Encoder *) new EncoderHW(this, this->camera);
-    } else {
-        this->encoder = (Encoder *) new EncoderLibAV(this, this->camera);
+    if (this->publish_h264) {
+        if (this->hw_encoder) {
+            this->encoder = (Encoder *) new EncoderHW(this, this->camera);
+        } else {
+            this->encoder = (Encoder *) new EncoderLibAV(this, this->camera);
+        }
     }
 
     this->camera->requestCompleted.connect(this, &CameraInterface::captureRequestComplete);
@@ -249,7 +268,6 @@ void CameraInterface::start() {
     for (std::unique_ptr<Request> &request : this->capture_requests) {
         this->camera->queueRequest(request.get());
     }
-
 }
 
 void CameraInterface::captureRequestComplete(Request *request) {
@@ -330,8 +348,22 @@ void CameraInterface::captureRequestComplete(Request *request) {
             this->lines_printed++;
         }
 
-        this->encoder->encode(plane_buffers, plane_strides, base_fd, this->buffer_size, &this->frameIdx, timestamp_ns, log);
+        // encode and publish h.264
+        if (this->publish_h264) {
+            this->encoder->encode(plane_buffers, plane_strides, base_fd, this->buffer_size, &this->frame_idx, timestamp_ns, log);
+        }
 
+        // publish image
+        if (this->publish_image) {
+            this->publishImage(plane_buffers, plane_strides, this->buffer_size, timestamp_ns, log);
+        }
+
+        // publish camera info
+        if (this->publish_info) {
+            this->publishCameraInfo(timestamp_ns, log);
+        }
+
+        // calibration frame capture & handling
         if (this->calibration_running
             && this->calibration_frames.size() < this->calibration_frames_requested
             && ns_since_epoch-last_calibration_frame_taken_ns > calibration_min_frame_delay_ns)
@@ -361,31 +393,93 @@ void CameraInterface::captureRequestComplete(Request *request) {
 }
 
 
-void getCurrentStamp(builtin_interfaces::msg::Time *stamp, uint64_t timestamp_ns) {
+void setCurrentStamp(builtin_interfaces::msg::Time *stamp, uint64_t timestamp_ns) {
     // Split into seconds and nanoseconds
     stamp->sec = static_cast<int32_t>(timestamp_ns / NS_TO_SEC);
     stamp->nanosec = static_cast<uint32_t>(timestamp_ns % NS_TO_SEC);;
 }
 
-void CameraInterface::publish(unsigned char *data, int size, bool keyframe, uint64_t pts, long timestamp_ns, bool log) {
+void CameraInterface::publishH264(unsigned char *data, int size, bool keyframe, uint64_t pts, long timestamp_ns, bool log) {
 
-    getCurrentStamp(&this->out_frame_msg.header.stamp, timestamp_ns);
-    this->out_frame_msg.pts = pts;
+    setCurrentStamp(&this->out_h264_msg.header.stamp, timestamp_ns);
+    this->out_h264_msg.pts = pts;
 
-    this->out_frame_msg.flags = keyframe ? 1 : 0;
-    this->out_frame_msg.data.assign(data, data + size);
+    this->out_h264_msg.flags = keyframe ? 1 : 0;
+    this->out_h264_msg.data.assign(data, data + size);
 
     if (log) {
-        this->log(GREEN, " >> Sending ", this->out_frame_msg.data.size(), "B", CLR, " sec: ", this->out_frame_msg.header.stamp.sec, " nsec: ", out_frame_msg.header.stamp.nanosec);
+        this->log(GREEN, " >> Sending H.264 ", this->out_h264_msg.data.size(), "B", CLR, " sec: ", this->out_h264_msg.header.stamp.sec, " nsec: ", out_h264_msg.header.stamp.nanosec);
     }
 
     if (rclcpp::ok()) {
-        this->publisher->publish(this->out_frame_msg);
-        if (this->publish_info) {
-            this->out_info_msg.header.stamp.sec = this->out_frame_msg.header.stamp.sec;
-            this->out_info_msg.header.stamp.nanosec = this->out_frame_msg.header.stamp.nanosec;
-            this->info_publisher->publish(this->out_info_msg);
-        }
+        this->h264_publisher->publish(this->out_h264_msg);
+    }
+}
+
+void CameraInterface::publishImage(const std::vector<AVBufferRef *>& planes, const std::vector<unsigned int>& strides, uint buffer_size, long timestamp_ns, bool log) {
+
+    setCurrentStamp(&this->out_image_msg.header.stamp, timestamp_ns);
+    
+    switch (this->image_output_format) {
+        case IMAGE_OUTPUT_FORMAT::BGR8: // we need to resize U and V planes, which costs CPU time
+            {
+                // Create Y plane Mat with stride
+                cv::Mat y_full(height, strides[0], CV_8UC1, planes[0]->data);
+
+                // Create U and V plane Mats with stride, but only every other row
+                cv::Mat u_full(height / 2, strides[1], CV_8UC1, planes[1]->data);
+                cv::Mat v_full(height / 2, strides[2], CV_8UC1, planes[2]->data);
+
+                // Resize U and V to match the full image dimensions
+                cv::Mat u_resized, v_resized;
+                cv::resize(u_full.clone(), u_resized, cv::Size(width, height), 0, 0, cv::INTER_NEAREST);
+                cv::resize(v_full.clone(), v_resized, cv::Size(width, height), 0, 0, cv::INTER_NEAREST);
+
+                // Combine YUV planes
+                std::vector<cv::Mat> yuv_channels = {y_full, u_resized, v_resized};
+                cv::Mat yuv;
+                cv::merge(yuv_channels, yuv);
+
+                // Convert YUV420 to RGB
+                cv::Mat bgr;
+                cv::cvtColor(yuv, bgr, cv::COLOR_YUV2BGR);
+
+                this->out_image_msg.data.assign(bgr.data, bgr.data + (bgr.rows*bgr.cols*3));
+            }
+            break;
+        case IMAGE_OUTPUT_FORMAT::MONO8:
+            {
+                this->out_image_msg.data.assign(planes[0]->data, planes[0]->data + (this->width*this->height));
+            }
+            break;
+        case IMAGE_OUTPUT_FORMAT::YUV420:
+            {
+                this->out_image_msg.data.assign(planes[0]->data, planes[0]->data + buffer_size);
+            }
+            break;
+        default:
+            return;
+    }
+
+    if (log) {
+        this->log(GREEN, " >> Sending Image ", this->out_image_msg.data.size(), "B", CLR, " sec: ", this->out_image_msg.header.stamp.sec, " nsec: ", out_image_msg.header.stamp.nanosec);
+    }
+
+    if (rclcpp::ok()) {
+        this->image_publisher->publish(this->out_image_msg);
+    }
+}
+
+void CameraInterface::publishCameraInfo(long timestamp_ns, bool log) {
+
+    setCurrentStamp(&this->out_info_msg.header.stamp, timestamp_ns);
+
+    if (log) {
+        this->log(GREEN, " >> Sending CameraInfo", CLR, " sec: ", this->out_info_msg.header.stamp.sec, " nsec: ", out_info_msg.header.stamp.nanosec);
+    }
+
+    if (rclcpp::ok()) {
+        this->info_publisher->publish(this->out_info_msg);
     }
 }
 
@@ -399,8 +493,31 @@ void CameraInterface::readConfig() {
     
     auto config_prefix = CameraInterface::GetConfigPrefix(this->location);
 
+    this->node->declare_parameter(config_prefix + "publish_h264", true);
+    this->publish_h264 = this->node->get_parameter(config_prefix + "publish_h264").as_bool();
+
+    this->node->declare_parameter(config_prefix + "publish_image", true);
+    this->publish_image = this->node->get_parameter(config_prefix + "publish_image").as_bool();
+
+    this->node->declare_parameter(config_prefix + "image_output_format", "yuv420");
+    auto image_output_format = this->node->get_parameter(config_prefix + "image_output_format").as_string();
+    if (image_output_format == IMAGE_OUTPUT_FORMAT_NAMES.at(IMAGE_OUTPUT_FORMAT::BGR8)) {
+        this->image_output_format = IMAGE_OUTPUT_FORMAT::BGR8;
+    } else
+    if (image_output_format == IMAGE_OUTPUT_FORMAT_NAMES.at(IMAGE_OUTPUT_FORMAT::YUV420)) {
+        this->image_output_format = IMAGE_OUTPUT_FORMAT::YUV420;
+    } else if (image_output_format == IMAGE_OUTPUT_FORMAT_NAMES.at(IMAGE_OUTPUT_FORMAT::MONO8)) {
+        this->image_output_format = IMAGE_OUTPUT_FORMAT::MONO8;
+    } else {
+        throw std::runtime_error("Invalid image output format, use 'yuv420', 'mono8' or 'bgr8'");
+    }
+
     this->node->declare_parameter(config_prefix + "publish_info", true);
     this->publish_info = this->node->get_parameter(config_prefix + "publish_info").as_bool();
+
+    this->h264_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}_h264", this->location, this->model);
+    this->image_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}", this->location, this->model);
+    this->info_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}_camera_info", this->location, this->model);
 
     this->node->declare_parameter(config_prefix + "enable_calibration", true);
     this->enable_calibration = this->node->get_parameter(config_prefix + "enable_calibration").as_bool();

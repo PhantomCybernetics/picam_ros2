@@ -37,10 +37,8 @@ cv::Mat yuv420ToRgbCopy(const std::vector<AVBufferRef *>& planes, const std::vec
 
 cv::Mat yuv420ToMonoCopy(const std::vector<AVBufferRef *>& planes, const std::vector<unsigned int>& strides, uint width, uint height) {
 
-    // Create Y plane Mat with stride
     cv::Mat y_full(height, strides[0], CV_8UC1, planes[0]->data);
     cv::Mat mono = y_full(cv::Rect(0, 0, width, height)).clone();
-
     return mono;
 }
 
@@ -97,7 +95,7 @@ bool readCalibration(std::string file_name, sensor_msgs::msg::CameraInfo& camera
     Json::Reader reader;
     if (reader.parse(file, c)) {
         
-        std::cout << "Loaded JSON calibration for "<< camera_model << ":  " << c << std::endl;
+        // std::cout << "Loaded JSON calibration for "<< camera_model << ":  " << c << std::endl;
 
         if (c.isMember("camera_model")) {
             if (c["camera_model"].asString() != camera_model)
