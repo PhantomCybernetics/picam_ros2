@@ -149,6 +149,8 @@ class CameraInterface {
         std::vector<cv::Mat> calibration_frames;
         cv::Size calibration_pattern_size;
         float calibration_square_size;
+        std::string calibration_files_base_path;
+        std::string calibration_file;
 
         StreamConfiguration *streamConfig;
         void readConfig();

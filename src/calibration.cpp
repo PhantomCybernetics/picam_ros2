@@ -1,6 +1,13 @@
 #include "picam_ros2/const.hpp"
 #include "picam_ros2/calibration.hpp"
+#include <json/writer.h>
 #include <opencv2/imgproc.hpp>
+#include <json/json.h>
+#include <filesystem>
+#include <fstream>
+#include "rclcpp/rclcpp.hpp"
+
+namespace fs = std::filesystem;
 
 cv::Mat yuv420ToRgbCopy(const std::vector<AVBufferRef *>& planes, const std::vector<unsigned int>& strides, uint width, uint height) {
 
@@ -82,4 +89,114 @@ void calibrateCamera(const std::vector<cv::Mat>& images, cv::Size pattern_size, 
     cv::Mat_<double> K = cameraMatrix;
     std::copy_n(K.begin(), 9, camera_info.k.begin());
     camera_info.d = std::vector<double>(distCoeffs.begin<double>(), distCoeffs.end<double>());
+}
+
+bool readCalibration(std::string file_name, sensor_msgs::msg::CameraInfo& camera_info, std::string camera_model, int width, int height) {
+    Json::Value c;
+    std::ifstream file(file_name);
+    Json::Reader reader;
+    if (reader.parse(file, c)) {
+        
+        std::cout << "Loaded JSON calibration for "<< camera_model << ":  " << c << std::endl;
+
+        if (c.isMember("camera_model")) {
+            if (c["camera_model"].asString() != camera_model)
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'camera_model' mismatch in %s", file_name.c_str());
+        } else {
+            RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'camera_model' not found in %s, unable to validate", file_name.c_str());
+        }
+
+        if (c.isMember("calibrated_width")) {
+            if (c["calibrated_width"].asInt() != width)
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'calibrated_width' mismatch in %s", file_name.c_str());
+        } else {
+            RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'calibrated_width' not found in %s, unable to validate", file_name.c_str());
+        }
+
+        if (c.isMember("calibrated_height")) {
+            if (c["calibrated_height"].asInt() != height)
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'calibrated_height' mismatch in %s", file_name.c_str());
+        } else {
+            RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'calibrated_height' not found in %s, unable to validate", file_name.c_str());
+        }
+
+        if (c.isMember("distortion_model")) {
+            camera_info.distortion_model = c["distortion_model"].asString();
+        } else {
+            RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'distortion_model' not found in %s", file_name.c_str());
+        }
+
+        if (c.isMember("k")) {
+            if (c["k"].size() != 9)
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "The size of the 'k' array is not 9 in %s", file_name.c_str());
+            for (uint i = 0; i < c["k"].size(); ++i) {
+                camera_info.k[i] = c["k"][i].asDouble();
+            }
+        } else {
+            RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'k' not found in %s", file_name.c_str());
+        }
+
+        if (c.isMember("d")) {
+            if (c["d"].size() != 5)
+                RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "The size of the 'd' array is not 5 in %s", file_name.c_str());
+            camera_info.d.clear();
+            for (uint i = 0; i < c["d"].size(); ++i) {
+                camera_info.d.push_back(c["d"][i].asDouble());
+            }
+        } else {
+            RCLCPP_WARN(rclcpp::get_logger("rclcpp"), "Attribute 'd' not found in %s", file_name.c_str());
+        }
+
+        return true;
+    } else {
+        return false;
+    }
+}
+
+bool writeCalibration(sensor_msgs::msg::CameraInfo& camera_info, std::string camera_model, int width, int height, std::string file_name) {
+    Json::Value c;
+    fs::path file_path(file_name);
+    
+    c["camera_model"] = camera_model;
+    c["calibrated_width"] = width;
+    c["calibrated_height"] = height;
+
+    c["distortion_model"] = camera_info.distortion_model;
+
+    Json::Value k;
+    for (size_t i = 0; i < camera_info.k.size(); i++) {
+        k.append(camera_info.k[i]);
+    }
+    c["k"] = k;
+
+    Json::Value d;
+    for (size_t i = 0; i < camera_info.d.size(); i++) {
+        d.append(camera_info.d[i]);
+    }
+    c["d"] = d;
+
+    // create directory structure if it doesn't exist
+    if (!fs::exists(file_path.parent_path())) {
+        fs::create_directories(file_path.parent_path());
+    }
+
+    std::ofstream outFile(file_name);
+    if (!outFile.is_open()) { // unable to open
+        return false;
+    }
+
+    Json::StreamWriterBuilder builder;
+    std::unique_ptr<Json::StreamWriter> writer(builder.newStreamWriter());
+    if (writer->write(c, &outFile) != 0) {
+        return false;
+    }
+
+    // Check if the write was successful
+    if (outFile.good()) {
+        outFile.close();
+        return true;
+    } else {
+        outFile.close();
+        return false;
+    }
 }

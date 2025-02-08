@@ -204,6 +204,12 @@ void CameraInterface::start() {
         this->out_info_msg.width = this->width;
         this->out_info_msg.height = this->height;
 
+        if (readCalibration(this->calibration_file, this->out_info_msg, this->model, this->width, this->height)) {
+            RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Loaded calibration file %s", this->calibration_file.c_str());
+        } else {
+            RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to load calibration file %s; camera uncalibrated", this->calibration_file.c_str());
+        }
+
         //TODO: overwrite with real calibration data
         //this->out_info_msg.k = //np.ndarray(shape=(9,))
         // this->out_info_msg.k[0] = 0.0f;
@@ -405,6 +411,12 @@ void CameraInterface::readConfig() {
     this->calibration_pattern_size = { (int)calibration_pattern_size[0], (int)calibration_pattern_size[1] };
     this->calibration_square_size = this->node->get_parameter("calibration_square_size_m").as_double();
 
+    this->calibration_files_base_path = this->node->get_parameter("calibration_files").as_string();
+    if (!this->calibration_files_base_path.empty() && this->calibration_files_base_path.back() != '/') {
+        this->calibration_files_base_path += '/';
+    }
+    this->calibration_file = fmt::format("{}{}-{}.json", this->calibration_files_base_path, this->model, this->location);
+
     this->node->declare_parameter(config_prefix + "hflip", false);
     this->node->declare_parameter(config_prefix + "vflip", false);
     this->hflip = this->node->get_parameter(config_prefix + "hflip").as_bool();
@@ -544,10 +556,18 @@ void CameraInterface::calibration_sample_frame(const std::shared_ptr<std_srvs::s
 }
 
 void CameraInterface::calibration_save(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
-                                               std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
-    response->success = true;
-    response->message = "Calibration saved";
-    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sCalibration saved for %s at location %d%s", GREEN.c_str(), this->model.c_str(), this->location, CLR.c_str());
+                                             std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+
+    if (writeCalibration(this->out_info_msg, this->model, this->width, this->height, this->calibration_file)) {
+        RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "Saved calibration file %s", this->calibration_file.c_str());
+        response->success = true;
+        response->message = "Calibration saved";
+    } else {
+        response->success = false;
+        response->message = "Failed to save calibration";
+        RCLCPP_ERROR(rclcpp::get_logger("rclcpp"), "Failed to save calibration in %s", this->calibration_file.c_str());
+    }
+    
     this->lines_printed = -1;
 }
 

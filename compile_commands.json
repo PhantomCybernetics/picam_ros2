@@ -12,6 +12,7 @@
              -isystem /opt/ros/humble/include/std_srvs \
              -isystem /opt/ros/humble/include/ament_index_cpp \
              -isystem /usr/include/opencv4 \
+             -isystem /usr/include/jsoncpp \
              -isystem /opt/ros/humble/include/libstatistics_collector \
              -isystem /opt/ros/humble/include/builtin_interfaces \
              -isystem /opt/ros/humble/include/rosidl_runtime_c \

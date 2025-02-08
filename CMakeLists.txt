@@ -18,10 +18,12 @@ find_package(OpenCV REQUIRED)
 find_library(AVCODEC_LIBRARY avcodec)
 find_library(AVUTIL_LIBRARY avutil)
 find_library(FMT_LIBRARY fmt)
+find_library(JSONCPP_LIBRARY jsoncpp)
 
 pkg_check_modules(LIBCAMERA REQUIRED libcamera)
 
 include_directories(/usr/local/include/libcamera/)
+include_directories(/usr/include/jsoncpp/)
 include_directories(./include/)
 
 add_executable(picam
@@ -47,6 +49,7 @@ target_link_libraries(picam
   ${AVCODEC_LIBRARY}
   ${AVUTIL_LIBRARY}
   ${FMT_LIBRARY}
+  ${JSONCPP_LIBRARY}
 )
 
 install(TARGETS
