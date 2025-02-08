@@ -28,7 +28,7 @@ docker build -f Dockerfile -t phntm/picam-ros2:$ROS_DISTRO \
 ```
 
 ### Configure the Node
-The following is an example config file (~/picam_ros.yaml)
+The following is an example config file (~/picam_ros2_params.yaml)
 ```yaml
 /**:
   ros__parameters:
@@ -86,7 +86,7 @@ services:
     # cpuset: '3' # consider restricting to a single CPU core
     # shm_size: 200m # more room for camera frames
     volumes:
-      - ~/picam_ros2.yaml:/ros2_ws/picam_ros2_params.yaml # config goes here
+      - ~/picam_ros2_params.yaml:/ros2_ws/picam_ros2_params.yaml # config goes here
       - /tmp:/tmp
       - ~/picam_ros2_calibration:/calibration # calibration files are stored here
     devices:
@@ -97,5 +97,5 @@ services:
 
 ### Launch
 ```bash
-docker compose up picam_ros
+docker compose up picam_ros2
 ```
