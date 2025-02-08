@@ -1,10 +1,12 @@
-# Raspberry Pi Camera ROS2 Node
+# Raspberry Pi CSI Camera ROS2 Node
 
 Streams hardware or software encoded H.264 frames as ROS2 topics, optionally also allows to stream YUV420/Mono8 or BGR8 uncompressed frames as an Image topic.
 
 Using libcamera to capture frames, and v4l2 with BCM2711 or libav for CPU-bases encoding. DMA heaps are used for fast frame access.
 
 This node allows to calibrate the camera via ROS2 service calls, then streams calibration data as a CameraInfo topic.
+
+This package was developped to work with [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge), but can be used without it.
 
 ## Install
 
@@ -99,3 +101,9 @@ services:
 ```bash
 docker compose up picam_ros2
 ```
+
+## Tested Hardware
+
+| Board    | Encoder   | Camera           | Resolution | Bitrate | FPS  |
+| -------- | --------- | ---------------- | ---------- | ------- | ---- |
+| RasPi 4B | BCM2711   | imx708_wide_noir | 1920x1080  | 5000000 | 30   |
