@@ -112,7 +112,7 @@ Then start calling the `camera_N/sample_frame` service to capture individual cal
 After the last frame is captured, the node will process all of them (streaming will freeze for a while), then it'll start immediately publishing CameraInfo messages with the updated camera model. To save the calibration, call the `camera_N/save_calibration` service. The camera distortion coefficients will be saved in a JSON file in the directory configured by the `calibration_files` attribute and loaded on the next launch of the node. 
 
 > [!TIP]
-> If you map the `calibration_files` directory from the outside of the Docler container as shown in the `compose.yaml` examples above, your calibration will be preserved between Docker container rebuilds.
+> If you map the `calibration_files` directory via `volumes` from the host filesystem to the Docker container as shown in the `compose.yaml` examples above, your calibration file will be preserved between Docker container rebuilds.
 
 ## Tested Hardware
 
