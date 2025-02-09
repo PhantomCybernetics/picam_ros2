@@ -93,7 +93,7 @@ services:
     devices:
       - /dev:/dev # cameras need this
     command:
-      ros2 launch picam_ros2 picam_ros2_launch.py
+      ros2 launch picam_ros2 picam_launch.py
 ```
 
 ### Launch

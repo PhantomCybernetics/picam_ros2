@@ -496,7 +496,7 @@ void CameraInterface::readConfig() {
     this->node->declare_parameter(config_prefix + "publish_h264", true);
     this->publish_h264 = this->node->get_parameter(config_prefix + "publish_h264").as_bool();
 
-    this->node->declare_parameter(config_prefix + "publish_image", true);
+    this->node->declare_parameter(config_prefix + "publish_image", false);
     this->publish_image = this->node->get_parameter(config_prefix + "publish_image").as_bool();
 
     this->node->declare_parameter(config_prefix + "image_output_format", "yuv420");

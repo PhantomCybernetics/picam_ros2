@@ -7,7 +7,7 @@ def generate_launch_description():
 
     config = os.path.join(
         '/ros2_ws/',
-        'picam_ros_params.yaml'
+        'picam_ros2_params.yaml'
         )
 
     return LaunchDescription([
