@@ -37,6 +37,7 @@ The following is an example config file (~/picam_ros2_params.yaml)
     topic_prefix: '/picam_ros2/camera_'
     log_message_every_sec: 5.0
     log_scroll: False
+
     calibration_frames_needed: 10
     calibration_square_size_m: 0.0175 # set this to your actual calibration square dimension!
     calibration_pattern_size: [ 9, 6 ] # set this to your calibration chessboard size!
@@ -46,32 +47,30 @@ The following is an example config file (~/picam_ros2_params.yaml)
       frame_id: 'pi_camera_optical_frame'
 
       enabled: True
+      enable_calibration: True
       width: 1920
       height: 1080
       hflip: False
       vflip: False
 
-      hw_encoder: True
+      hw_encoder: True # using hw-encoder, sw if False
       bitrate: 3000000
-      compression: 30
+      compression: 30 # 0=no compression, 100=max
       framerate: 30
 
       publish_h264: True
-      publish_image: False
-      image_output_format: yuv420
       publish_info: True
-
-      enable_calibration: True
-
-      buffer_count: 4
+      publish_image: False
+      # image_output_format: yuv420 # output format for the image topic (yuv420, mono8 or bgr8)
       
-      # exposure_time_ns: 30000
-      # analog_gain: 2.0
+      ae_enable: True # auto exposure enabled
+      # exposure_time_ns: 30000 # manually set fixed exposure time if ae_enable=False
+      awb_enable: True # auto white-balance 
+      # awb_mode: 0 # 0=auto, 1=incandescent, 2=tungsten, 3=fluorescent, 4=indoor, 5=daylight, 6=cloudy
       contrast: 1.3
-      ae_enable: True
-      awb_enable: True
-      awb_mode: 0
-      # awb_locked: False
+      analog_gain: 1.0 # analog gain of the sensor
+
+      # buffer_count: 4 # number of capture buffers
 ```
 
 ### Add Service to Your compose.yaml:
