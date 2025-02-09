@@ -6,7 +6,7 @@ Using libcamera to capture frames, and v4l2 with BCM2711 or libav for CPU-bases 
 
 This node allows to calibrate the camera via ROS2 service calls, then streams calibration data as a CameraInfo topic.
 
-This package was designed to work with [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) and to provide hardware-encoded H.264 video streaming, but can be used separately to ROSify your Pi camera modules. In order to achive maximum framerate, use the YUV420 or Mono8 outputs for Computer Vision. The BGR8 output costs extra CPU time as the node internally works with YUV420 and needs to scale up the U and V planes. 
+This package was designed to work with [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) and to provide fast hardware-encoded H.264 video streaming at low CPU cost, but can be used separately to ROSify your Pi camera modules. In order to achive maximum framerate on the Image topics, use YUV420 or Mono8 outputs. The additional BGR8 output costs extra CPU time as the node internally works with YUV420 and needs to scale up the U and V planes. 
 
 ## Install
 
@@ -74,7 +74,7 @@ The following is an example config file (~/picam_ros2_params.yaml)
       # awb_locked: False
 ```
 
-### Add Service to your compose.yaml:
+### Add Service to Your compose.yaml:
 ```yaml
 services:
   picam_ros2:
@@ -101,6 +101,19 @@ services:
 ```bash
 docker compose up picam_ros2
 ```
+
+## Calibration Process
+
+In order to calibrate a camera, you'll need a standard OpenCV calibratiion chessboard pattern [such as this one](https://raw.githubusercontent.com/opencv/opencv/refs/heads/4.x/doc/pattern.png) (more about these patterns can be found [here](https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html)). Print or display it on a flat screen as large as possible, then make sure your `calibration_pattern_size` and `calibration_square_size_m` are set correctly in your YAML. You will need to restart the node/container to load the latest values from the YAML file. Attribute `publish_info` must be set to `True`.
+
+Then call the `camera_N/calibrate` with `true` as the passed value to start the calibration process. There's one such service for each detected camera, N represents the camera's location. [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) provides convenient UI to make these service calls, or even map them to keyboard keys or controller buttons.
+
+Then start calling the `camera_N/sample_frame` service to capture individual calibration frames, the `calibration_frames_needed` attribute defines how many will be taken. Always make sure the calibration pattern is clearly visible, take samples from various angles and distances without any reflections, cover as much of the camera's field of view as possible.
+
+After the last frame is captured, the node will process all of them (streaming will freeze for a while), then it'll start immediately publishing CameraInfo messages with the updated camera model. To save the calibration, call the `camera_N/save_calibration` service. The camera distortion coefficients will be saved in a JSON file in the directory configured by the `calibration_files` attribute and loaded on the next launch of the node. 
+
+> [!TIP]
+> If you map the `calibration_files` directory from the outside of the Docler container as shown in the `compose.yaml` examples above, your calibration will be preserved between Docker container rebuilds.
 
 ## Tested Hardware
 
