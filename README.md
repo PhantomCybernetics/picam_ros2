@@ -6,7 +6,7 @@ Using libcamera to capture frames, and v4l2 with BCM2711 or libav for CPU-bases 
 
 This node allows to calibrate the camera via ROS2 service calls, then streams calibration data as a CameraInfo topic.
 
-This package was designed to work with [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) and to provide fast hardware-encoded H.264 video streaming at low CPU cost, but can be used separately to ROSify your Pi camera modules. In order to achive maximum framerate on the Image topics, use YUV420 or Mono8 outputs. The additional BGR8 output costs extra CPU time as the node internally works with YUV420 and needs to scale up the U and V planes. 
+This package was designed to work with [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) and to provide fast hardware-encoded H.264 video streaming at low CPU cost, but can be used separately to ROSify your Pi camera modules. In order to achive maximum framerate on the Image topics, use YUV420 or Mono8 outputs. The additional BGR8 output costs extra CPU time as the node internally works with YUV420 and needs to scale up the U and V planes. Using the BGR8 output with H.264 is not recommended as it significantly degrades FPS.
 
 ## Install
 
