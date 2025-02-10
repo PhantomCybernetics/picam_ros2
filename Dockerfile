@@ -46,6 +46,8 @@ RUN apt install -y libglib2.0-dev libgstreamer-plugins-base1.0-dev
 RUN apt install -y ninja-build pkg-config
 RUN apt install -y --no-install-recommends libopencv-dev
 RUN apt install -y libjsoncpp-dev
+RUN apt install -y libyaml-cpp-dev
+
 
 # RUN echo "export PATH=\$PATH:/root/.local/bin" >> /root/.bashrc
 ENV PATH=$PATH":/root/.local/bin"

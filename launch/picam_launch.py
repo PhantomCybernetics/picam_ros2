@@ -15,7 +15,6 @@ def generate_launch_description():
         Node(
             package='picam_ros2',
             executable='picam',
-            name='picam_ros2',
             output='screen',
             emulate_tty=True,
             parameters=[config]

@@ -8,7 +8,7 @@ This node allows to calibrate the camera via ROS2 service calls, then streams ca
 
 This package was designed to work with [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) and to provide fast hardware-encoded H.264 video streaming at low CPU cost, but can be used separately to ROSify your Pi camera modules. In order to achive maximum framerate on the Image topics, use YUV420 or Mono8 outputs. The additional BGR8 output costs extra CPU time as the node internally works with YUV420 and needs to scale up the U and V planes. Using the BGR8 output with H.264 is not recommended as it significantly degrades FPS.
 
-The node can handle multiple cameras connected to the same board at the same time via different CSI ports (such as the Compute Module 4).
+The node can handle multiple cameras connected to the same board at the same time via different CSI ports (such as the Compute Module 4 or Pi 5).
 
 ## Install
 
@@ -36,6 +36,7 @@ The following is an example config file (~/picam_ros2_params.yaml)
 ```yaml
 /**:
   ros__parameters:
+    # node_name: "picam_ros2"
     topic_prefix: '/picam_ros2/camera_'
     log_message_every_sec: 5.0
     log_scroll: False
@@ -45,7 +46,7 @@ The following is an example config file (~/picam_ros2_params.yaml)
     calibration_pattern_size: [ 9, 6 ] # set this to your calibration chessboard size!
     calibration_files: '/calibration' # calibration files saved here
 
-    /camera_2: # 2 is the camera location
+    /camera_0: # 0 is the camera location
       frame_id: 'pi_camera_optical_frame'
 
       enabled: True
@@ -123,3 +124,4 @@ After the last frame is captured, the node will process all of them (streaming w
 | RasPi 4B | BCM2711   | imx708_wide_noir               | 1920x1080  | 5000000 | 30      |
 | CM 4     | BCM2711   | imx708_wide                    | 1920x1080  | 5000000 | 30      |
 | CM 4     | BCM2711   | imx708_wide + imx708_wide_noir | 1920x1080  | 5000000 | 30 + 30 |
+| RasPi 5  | CPU       | imx708_wide                    | 1920x1080  | 5000000 | 30      |

@@ -8,7 +8,7 @@
 class PicamROS2 : public rclcpp::Node
 {
   public:
-    PicamROS2();
+    PicamROS2(std::string node_name);
     std::future<int> async_function(int x);
     
   private:

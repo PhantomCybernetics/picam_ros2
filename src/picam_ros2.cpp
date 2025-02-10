@@ -7,6 +7,7 @@
 #include <vector>
 #include <thread>
 
+#include <yaml-cpp/yaml.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
 
@@ -22,8 +23,8 @@
 using namespace libcamera;
 using namespace std::chrono_literals;
 
-PicamROS2::PicamROS2() : Node("picam_ros2"), count_(0)
-{
+PicamROS2::PicamROS2(std::string node_name) : Node(node_name), count_(0)
+{   
     this->declare_parameter("topic_prefix", "/picam_ros2/camera_");
     this->declare_parameter("log_message_every_sec", 5.0); // -1.0 = off
     this->declare_parameter("log_scroll", false);
@@ -31,26 +32,7 @@ PicamROS2::PicamROS2() : Node("picam_ros2"), count_(0)
     this->declare_parameter("calibration_pattern_size", std::vector<int>{ 9, 6 });
     this->declare_parameter("calibration_square_size_m", 0.019f);
     this->declare_parameter("calibration_files", "/calibration/");
-
-    //   publisher_ = this->create_publisher<std_msgs::msg::String>("topic", 10);
-    //   timer_ = this->create_wall_timer(1000ms, std::bind(&PicamROS2::timer_callback, this));
 }
-
-// std::future<int> PicamROS2::async_function(int x) {
-//     return std::async(std::launch::async, [this, x]() {
-//         // Simulating some work
-//         std::this_thread::sleep_for(std::chrono::seconds(2));
-//         return x * 2;
-//     });
-// }
-
-// void PicamROS2::timer_callback()
-// {
-//   auto message = std_msgs::msg::String();
-//   message.data = "Hello, world! " + std::to_string(count_++);
-//   RCLCPP_INFO(this->get_logger(), "Publishing: '%s'", message.data.c_str());
-//   publisher_->publish(message);
-// }
 
 void reloadUdevRules() {
     if (!std::filesystem::exists("/.phntm_devices_initialized")) {
@@ -96,8 +78,14 @@ int main(int argc, char * argv[])
         return EXIT_FAILURE;
     }
 
+    std::string node_name = "picam_ros2";
+    YAML::Node node_config = YAML::LoadFile("/ros2_ws/picam_ros2_params.yaml");
+    if (node_config["/**"]["ros__parameters"]["node_name"].IsDefined()) {
+        node_name = node_config["/**"]["ros__parameters"]["node_name"].as<std::string>();
+    }
+
     rclcpp::init(argc, argv);
-    auto node = std::make_shared<PicamROS2>();
+    auto node = std::make_shared<PicamROS2>(node_name);
 
     std::vector<std::shared_ptr<CameraInterface>> camera_interfaces;
 
@@ -110,9 +98,6 @@ int main(int argc, char * argv[])
 
         const ControlList &props = camera->properties();
         
-        // if (props.contains(properties::Location.id())) {
-        //     location = props.get(properties::Location).value();
-        // }
         std::string searchStr = "i2c@"; // the location returned by props.get(properties::Location).value() is always 2, so parsing the id string
         size_t pos = c->id().find(searchStr);
         if (pos != std::string::npos) {
@@ -152,11 +137,7 @@ int main(int argc, char * argv[])
         cam_interface->start();
     }
 
-    // auto result = node->async_function(5);
     rclcpp::spin(node);
-    // while (true) {
-    //     std::this_thread::sleep_for(std::chrono::seconds(2));
-    // }
     
     std::cout << "Yo, shutting down..." << std::endl;
 
@@ -165,10 +146,6 @@ int main(int argc, char * argv[])
     }
 
     camera_interfaces.clear();
-
-    // for (std::thread &cam_thread : camera_threads) {
-    //     cam_thread.join();
-    // }
 
     cm->stop();
     rclcpp::shutdown();

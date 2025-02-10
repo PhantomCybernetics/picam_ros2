@@ -13,6 +13,7 @@ find_package(ffmpeg_image_transport_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(OpenCV REQUIRED)
+find_package(yaml-cpp REQUIRED)
 # find_package(cv_bridge REQUIRED)
 
 find_library(AVCODEC_LIBRARY avcodec)
@@ -25,6 +26,7 @@ pkg_check_modules(LIBCAMERA REQUIRED libcamera)
 include_directories(/usr/local/include/libcamera/)
 include_directories(/usr/include/jsoncpp/)
 include_directories(./include/)
+include_directories(/usr/include)
 
 add_executable(picam
               src/picam_ros2.cpp
@@ -50,6 +52,7 @@ target_link_libraries(picam
   ${AVUTIL_LIBRARY}
   ${FMT_LIBRARY}
   ${JSONCPP_LIBRARY}
+  ${YAML_CPP_LIBRARIES}
 )
 
 install(TARGETS
