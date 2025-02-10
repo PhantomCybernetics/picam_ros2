@@ -109,9 +109,21 @@ int main(int argc, char * argv[])
         std::string model = "N/A";
 
         const ControlList &props = camera->properties();
-        if (props.contains(properties::Location.id())) {
-            location = props.get(properties::Location).value();
+        
+        // if (props.contains(properties::Location.id())) {
+        //     location = props.get(properties::Location).value();
+        // }
+        std::string searchStr = "i2c@"; // the location returned by props.get(properties::Location).value() is always 2, so parsing the id string
+        size_t pos = c->id().find(searchStr);
+        if (pos != std::string::npos) {
+            size_t startPos = pos + searchStr.length();
+            size_t endPos = c->id().find('/', startPos);
+            if (endPos != std::string::npos) {
+                std::string numberStr = c->id().substr(startPos, endPos - startPos);
+                location = std::stoi(numberStr);
+            }
         }
+
         if (props.contains(properties::Model.id())) {
             model = props.get(properties::Model)->c_str();
         }
@@ -119,9 +131,14 @@ int main(int argc, char * argv[])
             rotation = props.get(properties::Rotation).value();
         }  
 
-        auto config_prefix = CameraInterface::GetConfigPrefix(location);
-
         std::cout << CYAN << "Found Cam ID=" << c->id() << ", Location=" << location << ", Rotation=" << rotation << "; Model=" << model << CLR << std::endl;
+        
+        if (location == -1) {
+            std::cerr << RED << "Cam ID=" << c->id() << ": error parsing location; camera will be disabled" << CLR << std::endl;
+            continue;
+        }
+
+        auto config_prefix = CameraInterface::GetConfigPrefix(location);
 
         node->declare_parameter(config_prefix + "enabled", true); // on by default
         auto enabled = node->get_parameter(config_prefix + "enabled").as_bool();
