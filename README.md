@@ -8,6 +8,8 @@ This node allows to calibrate the camera via ROS2 service calls, then streams ca
 
 This package was designed to work with [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) and to provide fast hardware-encoded H.264 video streaming at low CPU cost, but can be used separately to ROSify your Pi camera modules. In order to achive maximum framerate on the Image topics, use YUV420 or Mono8 outputs. The additional BGR8 output costs extra CPU time as the node internally works with YUV420 and needs to scale up the U and V planes. Using the BGR8 output with H.264 is not recommended as it significantly degrades FPS.
 
+The node can handle multiple cameras connected to the same board at the same time via different CSI ports (such as the Compute Module 4).
+
 ## Install
 
 ### Install Docker, Docker Build & Docker Compose
@@ -116,7 +118,8 @@ After the last frame is captured, the node will process all of them (streaming w
 
 ## Tested Hardware
 
-| Board    | Encoder   | Camera           | Resolution | Bitrate | FPS  |
-| -------- | --------- | ---------------- | ---------- | ------- | ---- |
-| RasPi 4B | BCM2711   | imx708_wide_noir | 1920x1080  | 5000000 | 30   |
-| CM 4     | BCM2711   | imx708_wide      | 1920x1080  | 5000000 | 30   |
+| Board    | Encoder   | Camera                         | Resolution | Bitrate | FPS  |
+| -------- | --------- | ------------------------------ | ---------- | ------- | ---- |
+| RasPi 4B | BCM2711   | imx708_wide_noir               | 1920x1080  | 5000000 | 30   |
+| CM 4     | BCM2711   | imx708_wide                    | 1920x1080  | 5000000 | 30   |
+| CM 4     | BCM2711   | imx708_wide + imx708_wide_noir | 1920x1080  | 5000000 | 30   |
