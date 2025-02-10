@@ -10,6 +10,9 @@ This package was designed to work with [Phantom Bridge](https://github.com/Phant
 
 The node can handle multiple cameras connected to the same board at the same time via different CSI ports (such as the Compute Module 4 or Pi 5).
 
+> [!NOTE]
+> Note that Raspberry Pi 5 no longer has the hardware video encoder the older models had. Encoding to streamable H.264 is done at a CPU cost.
+
 ## Install
 
 ### Install Docker, Docker Build & Docker Compose
@@ -56,7 +59,7 @@ The following is an example config file (~/picam_ros2_params.yaml)
       hflip: False
       vflip: False
 
-      hw_encoder: True # using hw-encoder, sw if False
+      hw_encoder: True # True=using hw-encoder, False=CPU
       bitrate: 3000000
       compression: 30 # 0=no compression, 100=max
       framerate: 30
@@ -121,7 +124,8 @@ After the last frame is captured, the node will process all of them (streaming w
 
 | Board    | Encoder   | Camera                         | Resolution | Bitrate | FPS     |
 | -------- | --------- | ------------------------------ | ---------- | ------- | ------- |
-| RasPi 4B | BCM2711   | imx708_wide_noir               | 1920x1080  | 5000000 | 30      |
+| Pi 4B    | BCM2711   | imx708_wide_noir               | 1920x1080  | 5000000 | 30      |
 | CM 4     | BCM2711   | imx708_wide                    | 1920x1080  | 5000000 | 30      |
 | CM 4     | BCM2711   | imx708_wide + imx708_wide_noir | 1920x1080  | 5000000 | 30 + 30 |
-| RasPi 5  | CPU       | imx708_wide                    | 1920x1080  | 5000000 | 30      |
+| Pi 5     | CPU       | imx708_wide                    | 1920x1080  | 5000000 | 30      |
+| Pi 5     | CPU       | imx708_wide + imx708_wide_noir | 1920x1080  | 5000000 | 30 + 30 |
