@@ -118,8 +118,8 @@ After the last frame is captured, the node will process all of them (streaming w
 
 ## Tested Hardware
 
-| Board    | Encoder   | Camera                         | Resolution | Bitrate | FPS  |
-| -------- | --------- | ------------------------------ | ---------- | ------- | ---- |
-| RasPi 4B | BCM2711   | imx708_wide_noir               | 1920x1080  | 5000000 | 30   |
-| CM 4     | BCM2711   | imx708_wide                    | 1920x1080  | 5000000 | 30   |
-| CM 4     | BCM2711   | imx708_wide + imx708_wide_noir | 1920x1080  | 5000000 | 30   |
+| Board    | Encoder   | Camera                         | Resolution | Bitrate | FPS     |
+| -------- | --------- | ------------------------------ | ---------- | ------- | ------- |
+| RasPi 4B | BCM2711   | imx708_wide_noir               | 1920x1080  | 5000000 | 30      |
+| CM 4     | BCM2711   | imx708_wide                    | 1920x1080  | 5000000 | 30      |
+| CM 4     | BCM2711   | imx708_wide + imx708_wide_noir | 1920x1080  | 5000000 | 30 + 30 |
