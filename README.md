@@ -126,6 +126,6 @@ After the last frame is captured, the node will process all of them (streaming w
 | -------- | --------- | ------------------------------ | ---------- | ------- | ------- |
 | Pi 4B    | BCM2711   | imx708_wide_noir               | 1920x1080  | 5000000 | 30      |
 | CM 4     | BCM2711   | imx708_wide                    | 1920x1080  | 5000000 | 30      |
-| CM 4     | BCM2711   | imx708_wide + imx708_wide_noir | 1920x1080  | 5000000 | 30 + 30 |
+| CM 4     | BCM2711   | imx708_wide + imx708_wide_noir | 1280x720   | 5000000 | 30 + 30 |
 | Pi 5     | CPU       | imx708_wide                    | 1920x1080  | 5000000 | 30      |
 | Pi 5     | CPU       | imx708_wide + imx708_wide_noir | 1920x1080  | 5000000 | 30 + 30 |
