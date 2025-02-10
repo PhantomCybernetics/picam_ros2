@@ -63,7 +63,7 @@ RUN mkdir -p $ROS_WS/src
 # WORKDIR $ROS_WS/kmsxx
 # RUN git submodule update --init
 # ENV PYTHONPATH=$PYTHONPATH":/ros2_ws/kmsxx/build/py"
-ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH":/usr/local/lib/"$ARCH"-linux-gnu"
+ENV LD_LIBRARY_PATH="/usr/local/lib/"$ARCH"-linux-gnu"
 # RUN /root/.local/bin/meson build
 # RUN ninja -C build install
 
