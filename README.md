@@ -11,7 +11,7 @@ This package was designed to work with [Phantom Bridge](https://github.com/Phant
 The node can handle multiple cameras connected to the same board at the same time via different CSI ports (such as the Compute Module 4 or Pi 5).
 
 > [!NOTE]
-> Note that Raspberry Pi 5 no longer has the hardware video encoder the older models had. Encoding to streamable H.264 is done at a CPU cost.
+> Note that Raspberry Pi 5 no longer has the hardware video encoder the older models had. Encoding to streamable H.264 is done at CPU cost.
 
 ## Install
 

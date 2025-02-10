@@ -7,7 +7,7 @@ Encoder::Encoder(CameraInterface *interface, std::shared_ptr<libcamera::Camera> 
 
 Encoder::~Encoder() {
 
-    std::cout << BLUE << "Cleaning up base encoder" << CLR << std::endl;
+    // std::cout << BLUE << "Cleaning up base encoder" << CLR << std::endl;
 
     this->interface = NULL;
     this->camera = NULL;

@@ -256,7 +256,12 @@ void CameraInterface::start() {
     // create the encoder
     if (this->publish_h264) {
         if (this->hw_encoder) {
-            this->encoder = (Encoder *) new EncoderHW(this, this->camera);
+            try {
+                this->encoder = (Encoder *) new EncoderHW(this, this->camera);
+            } catch (...) {
+                std::cout << RED << "HW encoder failed, defaulting to CPU..." << CLR << std::endl;
+                this->encoder = (Encoder *) new EncoderLibAV(this, this->camera);
+            }
         } else {
             this->encoder = (Encoder *) new EncoderLibAV(this, this->camera);
         }
