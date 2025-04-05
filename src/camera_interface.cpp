@@ -76,7 +76,8 @@ void CameraInterface::start() {
     else
         this->log(BLUE, "Not publishing CameraInfo");
 
-    this->log(YELLOW, "Camera orinetation: ", config->orientation); 
+    this->log(YELLOW, "FPS: ", this->fps); 
+    this->log(YELLOW, "Camera orientation: ", config->orientation); 
     this->log(YELLOW, "Stream config: ", this->streamConfig->toString()); 
     this->log(YELLOW, "Stride: ", this->streamConfig->stride); 
     this->log(YELLOW, "Bit rate: ", this->bit_rate); 
@@ -152,17 +153,19 @@ void CameraInterface::start() {
             }
 
             request->controls().set(libcamera::controls::AeEnable, this->ae_enable);
-            if (this->ae_enable) {
+            if (this->ae_enable) { //auto exposure
                 request->controls().set(libcamera::controls::AeMeteringMode, this->ae_metering_mode);
                 request->controls().set(libcamera::controls::AeConstraintMode, this->ae_constraint_mode);
                 request->controls().set(libcamera::controls::AeExposureMode, this->ae_exposure_mode);
                 int64_t frameDurationMax = 1000000 / this->fps; // fps in microseconds
-                int64_t frameDurationMin = 1000000 / 60; // fps in microseconds
+                int64_t frameDurationMin = 1000000 / this->fps; // fps in microseconds
                 request->controls().set(libcamera::controls::FrameDurationLimits, {frameDurationMin, frameDurationMax});
                 // request->controls().set(libcamera::controls::ExposureTimeMode, libcamera::controls::ExposureTimeModeAuto);
                 // request->controls().set(libcamera::controls::AnalogueGainMode, libcamera::controls::AnalogueGainModeAuto);
-            } else if (this->exposure_time > 0.0f) {
+            } else if (this->exposure_time > 0.0f) { // no auto exposure, constant time
                 request->controls().set(libcamera::controls::ExposureTime, this->exposure_time);
+            } else { // use fps
+                request->controls().set(libcamera::controls::ExposureTime, 1000000 / this->fps);
             }
             
             request->controls().set(libcamera::controls::AnalogueGain, this->analog_gain);
