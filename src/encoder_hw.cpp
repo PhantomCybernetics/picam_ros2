@@ -289,9 +289,10 @@ void EncoderHW::pollThread()
 					this->interface->log(clr, "Frame encoded (buff ", output_index, "/", buf.index, "), ts=", timestamp_ns, "; flags=", std::bitset<4>(buf.flags));
 				}
 
-				uint64_t pts = av_rescale_q(meta.frame_idx, //this->encoded_packet->pts, //this->outFrameMsg.header.stamp.sec * NS_TO_SEC + this->outFrameMsg.header.stamp.nanosec, //this->packet->pts
-                                    		AVRational{1, (int)this->interface->fps},
-                                    		AVRational{1, 90000});
+				// uint64_t pts = av_rescale_q(meta.frame_idx, //this->encoded_packet->pts, //this->outFrameMsg.header.stamp.sec * NS_TO_SEC + this->outFrameMsg.header.stamp.nanosec, //this->packet->pts
+                //                     		AVRational{1, (int)this->interface->fps},
+                //                     		AVRational{1, 90000});
+				uint64_t pts = (meta.timestamp_ns * CLOCK_RATE) / NS_TO_SEC;
 				
 				this->interface->publishH264((unsigned char*) this->hw_buffers[buf.index].mem, buf.m.planes[0].bytesused, keyframe, pts, timestamp_ns, log);
 				

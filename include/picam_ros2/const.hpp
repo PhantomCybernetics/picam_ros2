@@ -13,6 +13,7 @@ const std::string WHITE = "\033[37m2";
 const std::string CLR = "\033[0m";
 
 const int NS_TO_SEC = 1000000000;
+const int CLOCK_RATE = 90000;
 
 enum IMAGE_OUTPUT_FORMAT : uint {
   BGR8,

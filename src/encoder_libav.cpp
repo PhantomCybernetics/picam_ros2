@@ -230,7 +230,8 @@ void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<
     if (packet_ok) {
         uint64_t pts = av_rescale_q(this->encoded_packet->pts, //this->outFrameMsg.header.stamp.sec * NS_TO_SEC + this->outFrameMsg.header.stamp.nanosec, //this->packet->pts
                                     codec_context->time_base,
-                                    AVRational{1, 90000});
+                                    AVRational{1, CLOCK_RATE});
+        // uint64_t pts = this->encoded_packet->pts; //this->encoded_packet->pts * CLOCK_RATE) / NS_TO_SEC;
         bool keyframe = !!(this->encoded_packet->flags & AV_PKT_FLAG_KEY);
         this->interface->publishH264(this->encoded_packet->data, this->encoded_packet->size, keyframe, pts, timestamp_ns, log);
     }
