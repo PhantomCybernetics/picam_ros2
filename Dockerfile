@@ -7,11 +7,9 @@ RUN echo "Building docker image with ROS_DISTRO=$ROS_DISTRO, ARCH=$ARCH"
 RUN apt-get update -y --fix-missing
 RUN apt-get install -y ssh \
                        vim mc \
-                       iputils-ping net-tools iproute2 curl \
-                       pip
-
+                       iputils-ping net-tools iproute2 curl
 # aiorc neeed pip update or fails on cffi version inconsistency
-RUN pip install --upgrade pip
+# RUN pip install --upgrade pip
 
 # aiortc dev dependencies
 RUN apt-get update -y --fix-missing
@@ -20,7 +18,8 @@ RUN apt-get install -y libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pk
 # gazebo
 # RUN apt install -y ros-$ROS_DISTRO-ros-gz
 
-RUN pip install setuptools==58.2.0
+# RUN pip install setuptools==58.2.0
+RUN apt-get install -y python3-setuptools
 
 # raspi extras
 RUN apt-get install -y libraspberrypi0 libraspberrypi-dev libraspberrypi-bin
@@ -37,17 +36,23 @@ RUN apt-get install -y v4l-utils ffmpeg
 # RUN apt-get install -y libevent-dev
 # RUN apt-get install -y libgstreamer1.0-dev libgstreamer-plugins-base1.0-de
 
-RUN pip3 install --user meson
+# RUN pip3 install --user meson
 RUN apt install -y python3-jinja2
 RUN apt install -y libboost-dev
 RUN apt install -y libgnutls28-dev openssl libtiff-dev pybind11-dev
 RUN apt install -y python3-yaml python3-ply
 RUN apt install -y libglib2.0-dev libgstreamer-plugins-base1.0-dev
-RUN apt install -y ninja-build pkg-config
 RUN apt install -y --no-install-recommends libopencv-dev
 RUN apt install -y libjsoncpp-dev
 RUN apt install -y libyaml-cpp-dev
 
+RUN apt install -y build-essential
+# RUN add-apt-repository ppa:mesonbuild/meson
+# RUN apt update
+RUN apt install -y ninja-build pkg-config
+
+RUN apt install -y pip
+RUN pip3 install --user meson
 
 # RUN echo "export PATH=\$PATH:/root/.local/bin" >> /root/.bashrc
 ENV PATH=$PATH":/root/.local/bin"

@@ -209,7 +209,6 @@ void CameraInterface::start() {
     }
 
     if (this->publish_image) {
-
         this->log("Creating Image publisher for ", this->image_topic);
         this->image_publisher = this->node->create_publisher<sensor_msgs::msg::Image>(this->image_topic, this->image_qos);
         

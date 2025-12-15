@@ -28,10 +28,7 @@ sudo usermod -aG docker ${USER}
 cd ~
 git clone git@github.com:PhantomCybernetics/picam_ros2.git picam_ros2
 cd picam_ros2
-ROS_DISTRO=humble; \
-docker build -f Dockerfile -t phntm/picam-ros2:$ROS_DISTRO \
-  --build-arg ROS_DISTRO=$ROS_DISTRO \
-  .
+ROS_DISTRO=humble; docker build -f Dockerfile -t phntm/picam-ros2:$ROS_DISTRO --build-arg ROS_DISTRO=$ROS_DISTRO .
 ```
 
 ### Configure the Node

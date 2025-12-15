@@ -110,7 +110,7 @@ int main(int argc, char * argv[])
         }
 
         if (props.contains(properties::Model.id())) {
-            model = props.get(properties::Model)->c_str();
+            model = std::string(*props.get(properties::Model));
         }
         if (props.contains(properties::Rotation.id())) {
             rotation = props.get(properties::Rotation).value();
