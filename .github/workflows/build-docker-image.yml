@@ -27,46 +27,22 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - arch: amd64
-            ros_distro: rolling
-            runner: ubuntu-latest
-            platform: linux/amd64
           - arch: arm64
             ros_distro: rolling
             runner: ubuntu-24.04-arm
             platform: linux/arm64
-
-          - arch: amd64
-            ros_distro: kilted
-            runner: ubuntu-latest
-            platform: linux/amd64
           - arch: arm64
             ros_distro: kilted
             runner: ubuntu-24.04-arm
             platform: linux/arm64
-
-          - arch: amd64
-            ros_distro: jazzy
-            runner: ubuntu-latest
-            platform: linux/amd64
           - arch: arm64
             ros_distro: jazzy
             runner: ubuntu-24.04-arm
             platform: linux/arm64
-
-          - arch: amd64
-            ros_distro: iron
-            runner: ubuntu-latest
-            platform: linux/amd64
           - arch: arm64
             ros_distro: iron
             runner: ubuntu-24.04-arm
             platform: linux/arm64
-
-          - arch: amd64
-            ros_distro: humble
-            runner: ubuntu-latest
-            platform: linux/amd64
           - arch: arm64
             ros_distro: humble
             runner: ubuntu-24.04-arm
@@ -148,11 +124,6 @@ jobs:
       run: |
         # Check which architectures were successfully built for this ROS distro
         SUCCESSFUL_ARCHS=""
-        
-        # Check if amd64 build was successful for this ROS distro
-        if docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.ros_distro }}-amd64-${{ github.sha }}"; then
-          SUCCESSFUL_ARCHS="$SUCCESSFUL_ARCHS amd64"
-        fi
         
         # Check if arm64 build was successful for this ROS distro
         if docker buildx imagetools inspect "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ matrix.ros_distro }}-arm64-${{ github.sha }}"; then
