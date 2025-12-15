@@ -6,12 +6,12 @@ Using libcamera to capture frames, and v4l2 with BCM2711 or libav for CPU-bases 
 
 This node allows to calibrate the camera via ROS2 service calls, then streams calibration data as a CameraInfo topic.
 
-This package was designed to work with [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) and to provide fast hardware-encoded H.264 video streaming at low CPU cost, but can be used separately to ROSify your Pi camera modules. In order to achive maximum framerate on the Image topics, use YUV420 or Mono8 outputs. The additional BGR8 output costs extra CPU time as the node internally works with YUV420 and needs to scale up the U and V planes. Using the BGR8 output with H.264 is not recommended as it significantly degrades FPS.
+This package was designed to work with [Phantom Bridge](https://docs.phntm.io/bridge) and to provide fast hardware-encoded H.264 video streaming at low CPU cost, but can be used separately to ROSify your Pi camera modules. In order to achive maximum framerate on the Image topics, use YUV420 or Mono8 outputs. The additional BGR8 output costs extra CPU time as the node internally works with YUV420 and needs to scale up the U and V planes. Using the BGR8 output with H.264 is not recommended as it significantly degrades FPS.
 
 The node can handle multiple cameras connected to the same board at the same time via different CSI ports (such as the Compute Module 4 or Pi 5).
 
 > [!NOTE]
-> Note that Raspberry Pi 5 no longer has the hardware video encoder the older models had. Encoding to streamable H.264 is done at CPU cost.
+> Raspberry Pi 5 no longer has the hardware video encoder the older models had. Encoding to streamable H.264 is done at CPU cost.
 
 ## Install
 
@@ -120,9 +120,10 @@ docker compose up picam_ros2
 
 ## Calibration
 
+Camera needs to be calibrated before any CameraInfo messages can be published.
 In order to calibrate a camera, you'll need a standard OpenCV calibratiion chessboard pattern [such as this one](https://raw.githubusercontent.com/opencv/opencv/refs/heads/4.x/doc/pattern.png) (more about these patterns can be found [here](https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html)). Print or display it on a flat screen as large as possible, then make sure your `calibration_pattern_size` and `calibration_square_size_m` are set correctly in your YAML. You will need to restart the node/container to load the latest values from the YAML file. Attribute `publish_info` must be set to `True`.
 
-Then call the `camera_N/calibrate` with `true` as the passed value to start the calibration process. There's one such service for each detected camera, N represents the camera's location. [Phantom Bridge](https://github.com/PhantomCybernetics/phntm_bridge) provides convenient UI to make these service calls, or even map them to keyboard keys or controller buttons.
+Then call the `camera_N/calibrate` ROS service with `true` to start the calibration process. There's one such service for each detected camera, N represents the camera's location. [Phantom Bridge](https://docs.phntm.io/bridge) provides convenient UI to make these service calls, or even map them to keyboard keys or controller buttons.
 
 Then start calling the `camera_N/sample_frame` service to capture individual calibration frames, the `calibration_frames_needed` attribute defines how many will be taken. Always make sure the calibration pattern is clearly visible, take samples from various angles and distances without any reflections, cover as much of the camera's field of view as possible.
 
