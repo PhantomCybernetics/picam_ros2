@@ -81,6 +81,10 @@ class CameraInterface {
         uint image_output_format;
         bool publish_info;
 
+        rclcpp::QoS h264_qos = rclcpp::QoS(1);
+        rclcpp::QoS image_qos = rclcpp::QoS(1);
+        rclcpp::QoS info_qos = rclcpp::QoS(1);
+
         std::string h264_topic;
         std::string info_topic;
         std::string image_topic;

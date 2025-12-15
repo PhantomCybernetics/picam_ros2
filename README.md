@@ -65,10 +65,20 @@ The following is an example config file (~/picam_ros2_params.yaml)
       framerate: 30
 
       publish_h264: True
-      publish_info: True
+      h264_reliability: RELIABLE
+      h264_durability: TRANSIENT_LOCAL
+      h264_history_depth: 10
+
       publish_image: False
-      # image_output_format: yuv420 # output format for the image topic (yuv420, mono8 or bgr8)
-      
+      image_reliability: RELIABLE
+      image_durability: TRANSIENT_LOCAL
+      image_history_depth: 1
+
+      publish_info: True
+      info_reliability: BEST_EFFORT
+      info_durability: VOLATILE
+      info_history_depth: 1
+
       ae_enable: True # auto exposure enabled
       # exposure_time_ns: 30000 # manually set fixed exposure time if ae_enable=False
       awb_enable: True # auto white-balance 

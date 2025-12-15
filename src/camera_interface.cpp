@@ -1,3 +1,4 @@
+#include <string>
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 
@@ -198,10 +199,7 @@ void CameraInterface::start() {
     
     if (this->publish_h264) {
         this->log("Creating H.264 publisher for ", this->h264_topic);
-        auto h264_qos = rclcpp::QoS(1);
-        h264_qos.best_effort();
-        h264_qos.durability_volatile();
-        this->h264_publisher = this->node->create_publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>(this->h264_topic, h264_qos);
+        this->h264_publisher = this->node->create_publisher<ffmpeg_image_transport_msgs::msg::FFMPEGPacket>(this->h264_topic, this->h264_qos);
         
         this->out_h264_msg.header.frame_id = this->frame_id;
         this->out_h264_msg.width = this->width;
@@ -213,10 +211,7 @@ void CameraInterface::start() {
     if (this->publish_image) {
 
         this->log("Creating Image publisher for ", this->image_topic);
-        auto image_qos = rclcpp::QoS(1);
-        image_qos.best_effort();
-        image_qos.durability_volatile();
-        this->image_publisher = this->node->create_publisher<sensor_msgs::msg::Image>(this->image_topic, image_qos);
+        this->image_publisher = this->node->create_publisher<sensor_msgs::msg::Image>(this->image_topic, this->image_qos);
         
         this->out_image_msg.header.frame_id = this->frame_id;
         this->out_image_msg.width = this->width;
@@ -227,10 +222,7 @@ void CameraInterface::start() {
 
     if (this->publish_info) {
         this->log("Creating CameraInfo publisher for ", this->info_topic);
-        auto info_qos = rclcpp::QoS(1);
-        info_qos.best_effort();
-        info_qos.durability_volatile();
-        this->info_publisher = this->node->create_publisher<sensor_msgs::msg::CameraInfo>(this->info_topic, info_qos);
+        this->info_publisher = this->node->create_publisher<sensor_msgs::msg::CameraInfo>(this->info_topic, this->info_qos);
 
         this->out_info_msg.header.frame_id = this->frame_id;
         this->out_info_msg.width = this->width;
@@ -497,15 +489,88 @@ void CameraInterface::stop() {
     this->running = false;
 }
 
+std::string strToLower(std::string s) {
+    for (char &c : s) {
+        c = std::tolower(static_cast<unsigned char>(c));
+    }
+    return s;
+}
+
+std::string trim(const std::string str, const char *trim_chars = " \t\n\r\f\v") {
+    size_t start = str.find_first_not_of(trim_chars);
+    if (start == std::string::npos) return ""; // all whitespace
+    size_t end = str.find_last_not_of(trim_chars);
+    return str.substr(start, end - start + 1);
+}
+
+void getQoS(rclcpp::QoS* res, std::string debug_label, std::string reliability_str, std::string durability_str, int history_depth) {
+
+    res->history(rclcpp::HistoryPolicy::KeepLast);
+    res->keep_last(history_depth);
+
+    auto debug = debug_label + " QoS: keep_last=" + std::to_string(history_depth);
+
+    reliability_str = strToLower(trim(reliability_str));
+    durability_str = strToLower(trim(durability_str));
+
+    if (reliability_str == "reliable") {
+        res->reliability(rclcpp::ReliabilityPolicy::Reliable);
+        debug += " reliability=Reliable";
+    } else if (reliability_str == "best_effort") {
+        res->reliability(rclcpp::ReliabilityPolicy::BestEffort);
+        debug += " reliability=BestEffort";
+    } else if (reliability_str == "system_default") {
+        res->reliability(rclcpp::ReliabilityPolicy::SystemDefault);
+        debug += " reliability=SystemDefault";
+    } else {
+        res->reliability(rclcpp::ReliabilityPolicy::Reliable);
+        debug += " reliability=Reliable";
+    }
+
+    if (durability_str == "volatile") {
+        res->durability(rclcpp::DurabilityPolicy::Volatile);
+        debug += " durability=Volatile";
+    } else if (durability_str == "transient_local") {
+        res->durability(rclcpp::DurabilityPolicy::TransientLocal);
+        debug += " durability=TransientLocal";
+    } else if (durability_str == "system_default") {
+        res->durability(rclcpp::DurabilityPolicy::SystemDefault);
+        debug += " durability=SystemDefault";
+    } else {
+        res->durability(rclcpp::DurabilityPolicy::Volatile);
+        debug += " durability=Volatile";
+    }
+
+    std::cout << debug << std::endl;
+}
+
 void CameraInterface::readConfig() {
     
     auto config_prefix = CameraInterface::GetConfigPrefix(this->location);
 
     this->node->declare_parameter(config_prefix + "publish_h264", true);
     this->publish_h264 = this->node->get_parameter(config_prefix + "publish_h264").as_bool();
+    if (this->publish_h264) {
+        this->node->declare_parameter(config_prefix + "h264_reliability", "RELIABLE");
+        this->node->declare_parameter(config_prefix + "h264_durability", "VOLATILE");
+        this->node->declare_parameter(config_prefix + "h264_history_depth", 1);
+        auto reliability_str = this->node->get_parameter(config_prefix + "h264_reliability").as_string();
+        auto durability_str = this->node->get_parameter(config_prefix + "h264_durability").as_string();
+        auto history_depth = this->node->get_parameter(config_prefix + "h264_history_depth").as_int();
+        getQoS(&this->h264_qos, "H264", reliability_str, durability_str, history_depth);
+    }
 
     this->node->declare_parameter(config_prefix + "publish_image", false);
     this->publish_image = this->node->get_parameter(config_prefix + "publish_image").as_bool();
+    if (this->publish_image) {
+        this->node->declare_parameter(config_prefix + "image_reliability", "RELIABLE");
+        this->node->declare_parameter(config_prefix + "image_durability", "VOLATILE");
+        this->node->declare_parameter(config_prefix + "image_history_depth", 1);
+        auto reliability_str = this->node->get_parameter(config_prefix + "image_reliability").as_string();
+        auto durability_str = this->node->get_parameter(config_prefix + "image_durability").as_string();
+        auto history_depth = this->node->get_parameter(config_prefix + "image_history_depth").as_int();
+        getQoS(&this->image_qos, "Image", reliability_str, durability_str, history_depth);
+    }
 
     this->node->declare_parameter(config_prefix + "image_output_format", "yuv420");
     auto image_output_format = this->node->get_parameter(config_prefix + "image_output_format").as_string();
@@ -522,6 +587,15 @@ void CameraInterface::readConfig() {
 
     this->node->declare_parameter(config_prefix + "publish_info", true);
     this->publish_info = this->node->get_parameter(config_prefix + "publish_info").as_bool();
+    if (this->publish_info) {
+        this->node->declare_parameter(config_prefix + "info_reliability", "RELIABLE");
+        this->node->declare_parameter(config_prefix + "info_durability", "VOLATILE");
+        this->node->declare_parameter(config_prefix + "info_history_depth", 1);
+        auto reliability_str = this->node->get_parameter(config_prefix + "info_reliability").as_string();
+        auto durability_str = this->node->get_parameter(config_prefix + "info_durability").as_string();
+        auto history_depth = this->node->get_parameter(config_prefix + "info_history_depth").as_int();
+        getQoS(&this->info_qos, "Info", reliability_str, durability_str, history_depth);
+    }
 
     this->h264_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}_h264", this->location, this->model);
     this->image_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}", this->location, this->model);
@@ -720,6 +794,10 @@ CameraInterface::~CameraInterface() {
         std::cout << "Error cleaning up interface" << std::endl;
     }
     
+    // delete this->h264_qos;
+    // delete this->image_qos;
+    // delete this->info_qos;
+
     delete this->encoder;
     this->calibration_frames.clear();
     this->camera = NULL;
