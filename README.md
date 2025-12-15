@@ -23,7 +23,10 @@ sudo usermod -aG docker ${USER}
 # log out & back in
 ```
 
-### Build the Docker Image
+### (Optional) Clone this repo and build the Docker image from source
+
+You can also use our pre-built Docker images, see [ghcr.io/phantomcybernetics/picam_ros2](https://ghcr.io/phantomcybernetics/picam_ros2) for ROS distributions (only ARM64 is provided as this package is meant to run on Raspberry Pi).
+
 ```bash
 cd ~
 git clone git@github.com:PhantomCybernetics/picam_ros2.git picam_ros2
@@ -31,12 +34,12 @@ cd picam_ros2
 ROS_DISTRO=humble; docker build -f Dockerfile -t phntm/picam-ros2:$ROS_DISTRO --build-arg ROS_DISTRO=$ROS_DISTRO .
 ```
 
-### Configure the Node
+### Configure
 The following is an example config file (~/picam_ros2_params.yaml)
 ```yaml
 /**:
   ros__parameters:
-    # node_name: "picam_ros2"
+    # node_name: "picam_ros2" # name of the ROS node
     topic_prefix: '/picam_ros2/camera_'
     log_message_every_sec: 5.0
     log_scroll: False
@@ -55,54 +58,55 @@ The following is an example config file (~/picam_ros2_params.yaml)
       height: 1080
       hflip: False
       vflip: False
+      ae_enable: True # auto exposure enabled
+      awb_enable: True # auto white-balance 
+      contrast: 1.3
+      analog_gain: 1.0 # analog gain of the sensor
+      # exposure_time_ns: 30000 # manually set fixed exposure time if ae_enable=False
+      # awb_mode: 0 # 0=auto, 1=incandescent, 2=tungsten, 3=fluorescent, 4=indoor, 5=daylight, 6=cloudy
 
       hw_encoder: True # True=using hw-encoder, False=CPU
       bitrate: 3000000
       compression: 30 # 0=no compression, 100=max
       framerate: 30
+      # buffer_count: 4 # number of capture buffers
 
       publish_h264: True
-      h264_reliability: RELIABLE
-      h264_durability: TRANSIENT_LOCAL
-      h264_history_depth: 10
+      h264_reliability: RELIABLE # RELIABLE (default), BEST_EFFORT or SYSTEM_DEFAULT
+      h264_durability: VOLATILE # TRANSIENT_LOCAL, VOLATILE (default) or SYSTEM_DEFAULT
+      h264_history_depth: 10 # default 1
 
-      publish_image: False
-      image_reliability: RELIABLE
-      image_durability: TRANSIENT_LOCAL
-      image_history_depth: 1
+      publish_image: False 
+      image_reliability: RELIABLE # RELIABLE (default), BEST_EFFORT or SYSTEM_DEFAULT
+      image_durability: TRANSIENT_LOCAL # TRANSIENT_LOCAL, VOLATILE (default) or SYSTEM_DEFAULT
+      image_history_depth: 1 # default 1
 
       publish_info: True
-      info_reliability: BEST_EFFORT
-      info_durability: VOLATILE
-      info_history_depth: 1
-
-      ae_enable: True # auto exposure enabled
-      # exposure_time_ns: 30000 # manually set fixed exposure time if ae_enable=False
-      awb_enable: True # auto white-balance 
-      # awb_mode: 0 # 0=auto, 1=incandescent, 2=tungsten, 3=fluorescent, 4=indoor, 5=daylight, 6=cloudy
-      contrast: 1.3
-      analog_gain: 1.0 # analog gain of the sensor
-
-      # buffer_count: 4 # number of capture buffers
+      info_reliability: BEST_EFFORT  # RELIABLE (default), BEST_EFFORT or SYSTEM_DEFAULT
+      info_durability: VOLATILE # TRANSIENT_LOCAL, VOLATILE (default) or SYSTEM_DEFAULT
+      info_history_depth: 1 # default 1
 ```
 
-### Add Service to Your compose.yaml:
+### Add service to your compose.yaml
 ```yaml
 services:
   picam_ros2:
-    image: phntm/picam-ros2:humble
+    image: ghcr.io/phantomcybernetics/picam_ros2:main-jazzy
     container_name: picam-ros2
     hostname: picam-ros2.local
     restart: unless-stopped
     privileged: true
     network_mode: host
-    ipc: host # phntm bridge needs this to see other local containers
+    ipc: host
     # cpuset: '3' # consider restricting to a single CPU core
     # shm_size: 200m # more room for camera frames
+    # environment:
+    #  - ROS_DOMAIN_ID=22
     volumes:
       - ~/picam_ros2_params.yaml:/ros2_ws/picam_ros2_params.yaml # config goes here
-      - /tmp:/tmp
       - ~/picam_ros2_calibration:/calibration # calibration files are stored here
+      - /tmp:/tmp
+      - /run/udev:/run/udev:ro # cameras need this
     devices:
       - /dev:/dev # cameras need this
     command:
@@ -114,7 +118,7 @@ services:
 docker compose up picam_ros2
 ```
 
-## Calibration Process
+## Calibration
 
 In order to calibrate a camera, you'll need a standard OpenCV calibratiion chessboard pattern [such as this one](https://raw.githubusercontent.com/opencv/opencv/refs/heads/4.x/doc/pattern.png) (more about these patterns can be found [here](https://docs.opencv.org/4.x/da/d0d/tutorial_camera_calibration_pattern.html)). Print or display it on a flat screen as large as possible, then make sure your `calibration_pattern_size` and `calibration_square_size_m` are set correctly in your YAML. You will need to restart the node/container to load the latest values from the YAML file. Attribute `publish_info` must be set to `True`.
 

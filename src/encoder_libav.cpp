@@ -47,7 +47,9 @@ EncoderLibAV::EncoderLibAV(CameraInterface *interface, std::shared_ptr<libcamera
     : Encoder(interface, camera) {
 
     std::cout << BLUE << "Using SW encoder" << CLR << std::endl;
-    this->codec = avcodec_find_encoder(AV_CODEC_ID_H264); //CPU
+    auto codec = avcodec_find_encoder(AV_CODEC_ID_H264); //CPU
+    
+    this->codec = const_cast<AVCodec*>(codec);
     
     if (!this->codec){
         std::cerr << "Codec with specified id not found" << std::endl;

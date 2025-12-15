@@ -52,14 +52,20 @@ RUN apt install -y build-essential
 RUN apt install -y ninja-build pkg-config
 
 RUN apt install -y pip
-RUN pip3 install --user meson
-
-# RUN echo "export PATH=\$PATH:/root/.local/bin" >> /root/.bashrc
-ENV PATH=$PATH":/root/.local/bin"
 
 # init workspace
 ENV ROS_WS=/ros2_ws
 RUN mkdir -p $ROS_WS/src
+
+RUN apt-get install -y python3-venv
+RUN mkdir -p /root/ros2_py_venv
+RUN python3 -m venv /root/ros2_py_venv
+RUN . /root/ros2_py_venv/bin/activate && \
+    pip install meson && \
+    deactivate
+
+# RUN echo "export PATH=\$PATH:/root/.local/bin" >> /root/.bashrc
+ENV PATH=$PATH":/root/ros2_py_venv/bin"
 
 # kms++ from source (for picamera2) \
 # RUN apt-get install -y libdrm-common libdrm-dev
@@ -82,30 +88,9 @@ RUN apt-get install -y udev
 # libcamera from raspi fork
 RUN git clone https://github.com/raspberrypi/libcamera.git
 WORKDIR $ROS_WS/libcamera
-# RUN /root/.local/bin/meson setup build -D pycamera=enabled -D v4l2=True --reconfigure
-RUN /root/.local/bin/meson setup build --buildtype=release -Dpipelines=rpi/vc4,rpi/pisp -Dipas=rpi/vc4,rpi/pisp -Dv4l2=true -Dgstreamer=disabled -Dtest=false -Dlc-compliance=disabled -Dcam=disabled -Dqcam=disabled -Ddocumentation=disabled -Dpycamera=disabled
+# RUN /root/ros2_py_venv/bin/meson setup build -D pycamera=enabled -D v4l2=True --reconfigure
+RUN /root/ros2_py_venv/bin/meson setup build --buildtype=release -Dpipelines=rpi/vc4,rpi/pisp -Dipas=rpi/vc4,rpi/pisp -Dv4l2=true -Dgstreamer=disabled -Dtest=false -Dlc-compliance=disabled -Dcam=disabled -Dqcam=disabled -Ddocumentation=disabled -Dpycamera=disabled
 RUN ninja -C build install
-
-# ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH":/usr/local/lib/aarch64-linux-gnu/"
-
-# libcamera v0.2.0 from raspi fork works with picamera2==0.3.17 (current)
-# works on pi5 w bookworm (sw only encoding)
-
-# RUN git clone https://github.com/raspberrypi/libcamera.git
-# WORKDIR $ROS_WS/libcamera
-# RUN /root/.local/bin/meson setup build -D pycamera=enabled -D v4l2=True --reconfigure
-# RUN ninja -C build install
-# WORKDIR $ROS_WS
-# RUN git clone https://github.com/raspberrypi/picamera2.git
-# RUN pip install -e /ros2_ws/picamera2
-
-# ENV PYTHONPATH=$PYTHONPATH":/ros2_ws/libcamera/build/src/py"
-
-# needed by reload-devies.sh (reloads docker devices after the container has been created)
-
-
-# fix numpy version to >= 1.25.2
-# RUN pip install numpy --force-reinstall
 
 # generate entrypoint script
 RUN echo '#!/bin/bash \n \
