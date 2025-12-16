@@ -102,6 +102,7 @@ services:
     # shm_size: 200m # more room for camera frames
     # environment:
     #  - ROS_DOMAIN_ID=22
+    #  - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp # recommended with Phantom Bridge
     volumes:
       - ~/picam_ros2_params.yaml:/ros2_ws/picam_ros2_params.yaml # config goes here
       - ~/picam_ros2_calibration:/calibration # calibration files are stored here

@@ -9,6 +9,8 @@ RUN apt-get install -y ssh \
                        vim mc \
                        iputils-ping net-tools iproute2 curl
 
+RUN apt-get install -y ros-$ROS_DISTRO-rmw-cyclonedds-cpp
+
 RUN apt-get update -y --fix-missing
 RUN apt-get install -y libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pkg-config
 
