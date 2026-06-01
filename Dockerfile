@@ -1,9 +1,8 @@
 ARG ROS_DISTRO=humble
+FROM ros:$ROS_DISTRO
 
 # this only works on arm as we need libraspberrypi and that only ships on arm64
 ARG ARCH=aarch64
-
-FROM ros:$ROS_DISTRO
 
 # [x] Humble LST                22.04 Jammy LST
 # [x] Iron (Short-term)         22.04 Jammy LTS
@@ -12,7 +11,7 @@ FROM ros:$ROS_DISTRO
 # [ ] Lyrical LTS               26.04 Resolute LTS
 # [ ] Rolling (Short-term)      24.04 Noble !! LTS
 
-RUN echo "Building docker image with ROS_DISTRO=$ROS_DISTRO, ARCH=$ARCH"
+RUN echo "Building docker image with ROS_DISTRO=$ROS_DISTRO, ARCH="$ARCH
 
 RUN apt-get update -y --fix-missing
 RUN apt-get install -y ssh \
@@ -99,8 +98,11 @@ WORKDIR $ROS_WS
 # install picam_ros2
 COPY ./ $ROS_WS/src/picam_ros2
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
-     rosdep install -i --from-path src/picam_ros2 --rosdistro $ROS_DISTRO -y && \
-     colcon build --packages-select picam_ros2
+    if [ "$ROS_DISTRO" = "rolling" ]; then \
+        .  $ROS_WS/install/setup.bash ; \
+    fi && \
+    rosdep install -i --from-path src/picam_ros2 --rosdistro $ROS_DISTRO -y && \
+    colcon build --packages-select picam_ros2
 
 # pimp up prompt with hostame and color
 RUN echo "PS1='\${debian_chroot:+(\$debian_chroot)}\\[\\033[01;35m\\]\\u@\\h\\[\\033[00m\\] \\[\\033[01;34m\\]\\w\\[\\033[00m\\] '"  >> /root/.bashrc
