@@ -10,6 +10,9 @@ This package was designed to work with [Phantom Bridge](https://docs.phntm.io/br
 
 The node can handle multiple cameras connected to the same board at the same time via different CSI ports (such as the Compute Module 4 or Pi 5).
 
+![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Fhumble-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Firon-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Fjazzy-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Fkilted-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Flyrical-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Frolling-arm64.json)
+
+
 > [!NOTE]
 > Raspberry Pi 5 no longer has the hardware video encoder the older models had. Encoding to streamable H.264 is done at CPU cost.
 
@@ -21,17 +24,6 @@ E.g. on Debian/Ubuntu follow [these instructions](https://docs.docker.com/engine
 ```bash
 sudo usermod -aG docker ${USER}
 # log out & back in
-```
-
-### (Optional) Clone this repo and build the Docker image from source
-
-You can also use our pre-built Docker images, see [ghcr.io/phantomcybernetics/picam_ros2](https://ghcr.io/phantomcybernetics/picam_ros2) for ROS distributions (only ARM64 is provided as this package is meant to run on Raspberry Pi).
-
-```bash
-cd ~
-git clone git@github.com:PhantomCybernetics/picam_ros2.git picam_ros2
-cd picam_ros2
-ROS_DISTRO=humble; docker build -f Dockerfile -t phntm/picam-ros2:$ROS_DISTRO --build-arg ROS_DISTRO=$ROS_DISTRO .
 ```
 
 ### Configure
@@ -87,11 +79,21 @@ The following is an example config file (~/picam_ros2_params.yaml)
       info_history_depth: 1 # default 1
 ```
 
+You can also use our pre-built Docker images, see [ghcr.io/phantomcybernetics/picam_ros2](https://ghcr.io/phantomcybernetics/picam_ros2) for ROS distributions (only ARM64 is provided as this package is meant to run on Raspberry Pi).
+
 ### Add service to your compose.yaml
 ```yaml
 services:
   picam_ros2:
-    image: ghcr.io/phantomcybernetics/picam_ros2:main-jazzy
+    # select a pre-built image according to your ROS distro
+    image: ghcr.io/phantomcybernetics/picam_ros2:main-humble
+    # image: ghcr.io/phantomcybernetics/picam_ros2:main-iron
+    # image: ghcr.io/phantomcybernetics/picam_ros2:main-jazzy
+    # image: ghcr.io/phantomcybernetics/picam_ros2:main-kilted
+    # image: ghcr.io/phantomcybernetics/picam_ros2:main-lyrical
+    # image: ghcr.io/phantomcybernetics/picam_ros2:main-rolling
+    # or use phntm/picam-ros2:$ROS_DISTRO if building from source (see below)
+
     container_name: picam-ros2
     hostname: picam-ros2.local
     restart: unless-stopped
@@ -132,6 +134,39 @@ After the last frame is captured, the node will process all of them (streaming w
 
 > [!TIP]
 > If you map the `calibration_files` directory via `volumes` from the host filesystem to the Docker container as shown in the `compose.yaml` examples above, your calibration file will be preserved between Docker container rebuilds.
+
+
+## (Optional) Clone this repo and build the Docker Image from source
+
+```bash
+cd ~
+git clone git@github.com:PhantomCybernetics/picam_ros2.git picam_ros2
+cd picam_ros2
+ROS_DISTRO=humble; docker build -f Dockerfile -t phntm/picam-ros2:$ROS_DISTRO --build-arg ROS_DISTRO=$ROS_DISTRO .
+# then use phntm/picam-ros2:humble in your compose.yaml
+```
+
+## Upgrading
+You may want to check out and/or follow our [Bluesky account](https://bsky.app/profile/phntm.io) for updates and service announcements.
+
+```bash
+# Stop and remove the current Docker Container
+docker stop picam-ros2 && docker picam-ros2
+
+# If using pre-built Docker Images, run:
+docker image rm ghcr.io/phantomcybernetics/picam_ros2:main-humble
+docker compose pull picam_ros2
+
+# If building from source:
+docker image rm phntm/picam-ros2:humble
+cd ~/picam_ros2
+git pull
+ROS_DISTRO=humble; docker build -f Dockerfile -t phntm/picam-ros2:$ROS_DISTRO --build-arg ROS_DISTRO=$ROS_DISTRO .
+
+# All done, relaunch
+docker compose up picam_ros2
+```
+
 
 ## Tested Hardware
 

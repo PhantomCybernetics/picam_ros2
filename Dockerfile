@@ -74,6 +74,17 @@ RUN echo 'test -f "/ros2_ws/install/setup.bash" && source "/ros2_ws/install/setu
 
 WORKDIR $ROS_WS
 
+# TMP Rolling workaround - rosdep bindings are missing for ffmpeg_image_transport_msgs
+RUN if [ "$ROS_DISTRO" = "rolling" ]; then \
+        git clone https://github.com/ros-misc-utilities/ffmpeg_image_transport_msgs.git /ros2_ws/src/ffmpeg_image_transport_msgs -b rolling; \
+        . /opt/ros/$ROS_DISTRO/setup.sh ; \
+        . /ros2_ws/install/setup.sh ; \
+        rosdep install -i --from-path src/ffmpeg_image_transport_msgs --rosdistro $ROS_DISTRO -y ; \
+        colcon build --symlink-install --packages-select ffmpeg_image_transport_msgs; \
+    fi
+
+WORKDIR $ROS_WS
+
 # install picam_ros2
 COPY ./ $ROS_WS/src/picam_ros2
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
