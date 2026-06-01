@@ -1,6 +1,16 @@
 ARG ROS_DISTRO=humble
-FROM ros:$ROS_DISTRO
+
+# this only works on arm as we need libraspberrypi and that only ships on arm64
 ARG ARCH=aarch64
+
+FROM ros:$ROS_DISTRO
+
+# [x] Humble LST                22.04 Jammy LST
+# [x] Iron (Short-term)         22.04 Jammy LTS
+# [x] Jazzy LTS	                24.04 Noble LTS
+# [x] Kilted (Short-term)       24.04 Noble LTS
+# [ ] Lyrical LTS               26.04 Resolute LTS
+# [ ] Rolling (Short-term)      24.04 Noble !! LTS
 
 RUN echo "Building docker image with ROS_DISTRO=$ROS_DISTRO, ARCH=$ARCH"
 
@@ -17,7 +27,9 @@ RUN apt-get install -y libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pk
 RUN apt-get install -y python3-setuptools
 
 # raspi extras
-RUN apt-get install -y libraspberrypi0 libraspberrypi-dev libraspberrypi-bin
+RUN apt-get install -y libraspberrypi0
+RUN apt-get install -y libraspberrypi-dev
+RUN apt-get install -y libraspberrypi-bin
 
 # video stuffs
 RUN apt-get install -y v4l-utils ffmpeg

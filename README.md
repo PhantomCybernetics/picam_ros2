@@ -151,7 +151,7 @@ You may want to check out and/or follow our [Bluesky account](https://bsky.app/p
 
 ```bash
 # Stop and remove the current Docker Container
-docker stop picam-ros2 && docker picam-ros2
+docker stop picam-ros2 && docker rm picam-ros2
 
 # If using pre-built Docker Images, run:
 docker image rm ghcr.io/phantomcybernetics/picam_ros2:main-humble
