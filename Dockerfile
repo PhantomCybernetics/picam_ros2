@@ -99,7 +99,7 @@ WORKDIR $ROS_WS
 COPY ./ $ROS_WS/src/picam_ros2
 RUN . /opt/ros/$ROS_DISTRO/setup.sh && \
     if [ "$ROS_DISTRO" = "rolling" ]; then \
-        .  $ROS_WS/install/setup.bash ; \
+        . $ROS_WS/install/setup.sh ; \
     fi && \
     rosdep install -i --from-path src/picam_ros2 --rosdistro $ROS_DISTRO -y && \
     colcon build --packages-select picam_ros2
