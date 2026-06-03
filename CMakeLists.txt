@@ -15,6 +15,7 @@ find_package(std_srvs REQUIRED)
 find_package(OpenCV REQUIRED)
 find_package(yaml-cpp REQUIRED)
 # find_package(cv_bridge REQUIRED)
+find_package(PkgConfig REQUIRED)
 
 find_library(AVCODEC_LIBRARY avcodec)
 find_library(AVUTIL_LIBRARY avutil)
