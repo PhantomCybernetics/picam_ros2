@@ -7,7 +7,6 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(ffmpeg_image_transport_msgs REQUIRED)
@@ -39,16 +38,32 @@ add_executable(picam
               src/calibration.cpp
               src/dma_heaps.cpp
               )
-ament_target_dependencies(picam
-                          rclcpp
-                          std_msgs
-                          sensor_msgs
-                          std_srvs
-                          ffmpeg_image_transport_msgs
-                          OpenCV
-                          )
+# ament_target_dependencies(picam
+#                          rclcpp
+#                          std_msgs
+#                          sensor_msgs
+#                          std_srvs
+#                          ffmpeg_image_transport_msgs
+#                          OpenCV
+#                          )
+
+target_include_directories(picam PRIVATE
+    ${LIBCAMERA_INCLUDE_DIRS}
+    /usr/local/include/libcamera/
+    /usr/include/jsoncpp/
+    ./include/
+    /usr/include
+)
 
 target_link_libraries(picam
+  rclcpp::rclcpp
+  std_msgs::std_msgs
+  sensor_msgs::sensor_msgs
+  std_srvs::std_srvs
+  ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs
+  opencv_core
+  opencv_imgproc
+  opencv_calib3d
   ${LIBCAMERA_LIBRARIES}
   ${AVCODEC_LIBRARY}
   ${AVUTIL_LIBRARY}
