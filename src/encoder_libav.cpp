@@ -159,9 +159,9 @@ void EncoderLibAV::encode(std::vector<AVBufferRef *> plane_buffers, std::vector<
     this->frame_to_encode->pts = *frameIdx;
 
     /// Set frame type
-    bool isKeyFrame = false; // this->frameIdx == 0;
-    if (isKeyFrame){
-        this->frame_to_encode->key_frame = 1;
+    bool is_key_frame = false; // this->frameIdx == 0;
+    if (is_key_frame){
+        // this->frame_to_encode->key_frame = 1; // removed 
         this->frame_to_encode->pict_type = AVPictureType::AV_PICTURE_TYPE_I;
     }
 
@@ -252,6 +252,7 @@ EncoderLibAV::~EncoderLibAV() {
     av_packet_unref(this->encoded_packet);
     av_packet_free(&this->encoded_packet);
     
-    avcodec_close(this->codec_context);
-    avcodec_free_context(&this->codec_context);
+    //avcodec_close(this->codec_context);
+    if (this->codec_context)
+        avcodec_free_context(&this->codec_context);
 }
