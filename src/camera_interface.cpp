@@ -596,9 +596,10 @@ void CameraInterface::readConfig() {
         getQoS(&this->info_qos, "Info", reliability_str, durability_str, history_depth);
     }
 
-    this->h264_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}_h264", this->location, this->model);
-    this->image_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}", this->location, this->model);
-    this->info_topic = fmt::format(this->node->get_parameter("topic_prefix").as_string() + "{}/{}_camera_info", this->location, this->model);
+    auto topic_prefix = this->node->get_parameter("topic_prefix").as_string();
+    this->h264_topic = fmt::format("{}{}/{}_h264", topic_prefix, this->location, this->model);
+    this->image_topic = fmt::format("{}{}/{}", topic_prefix, this->location, this->model);
+    this->info_topic = fmt::format("{}{}/{}_camera_info", topic_prefix, this->location, this->model);
 
     this->node->declare_parameter(config_prefix + "enable_calibration", true);
     this->enable_calibration = this->node->get_parameter(config_prefix + "enable_calibration").as_bool();
