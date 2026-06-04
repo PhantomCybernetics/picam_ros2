@@ -66,7 +66,7 @@ class CameraInterface {
             this->lines_printed = -1; // don't erase on err
         }
         static std::string GetConfigPrefix(int location) {
-            return std::format("/camera_{}.", location);
+            return fmt::format("/camera_{}.", location);
         }
 
     private:
