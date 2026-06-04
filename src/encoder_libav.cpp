@@ -41,6 +41,10 @@ extern "C" {
     #include <libswscale/swscale.h>
 }
 
+#ifndef FF_PROFILE_H264_HIGH
+#define FF_PROFILE_H264_HIGH AV_PROFILE_H264_HIGH
+#endif
+
 using namespace libcamera;
 
 EncoderLibAV::EncoderLibAV(CameraInterface *interface, std::shared_ptr<libcamera::Camera> camera)
