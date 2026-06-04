@@ -38,6 +38,7 @@ add_executable(picam
               src/calibration.cpp
               src/dma_heaps.cpp
               )
+
 # ament_target_dependencies(picam
 #                          rclcpp
 #                          std_msgs
@@ -56,14 +57,13 @@ target_include_directories(picam PRIVATE
 )
 
 target_link_libraries(picam
+  ${ffmpeg_image_transport_msgs_TARGETS}
+  ${sensor_msgs_TARGETS}
+  ${std_msgs_TARGETS}
+  ${std_srvs_TARGETS}
   rclcpp::rclcpp
-  std_msgs::std_msgs
-  sensor_msgs::sensor_msgs
-  std_srvs::std_srvs
-  ffmpeg_image_transport_msgs::ffmpeg_image_transport_msgs
-  opencv_core
-  opencv_imgproc
-  opencv_calib3d
+  sensor_msgs::sensor_msgs_library
+  ${OpenCV_LIBS}
   ${LIBCAMERA_LIBRARIES}
   ${AVCODEC_LIBRARY}
   ${AVUTIL_LIBRARY}
