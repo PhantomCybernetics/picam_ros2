@@ -26,9 +26,11 @@ RUN apt-get install -y libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pk
 RUN apt-get install -y python3-setuptools
 
 # raspi extras
-RUN apt-get install -y libraspberrypi0
-RUN apt-get install -y libraspberrypi-dev
-RUN apt-get install -y libraspberrypi-bin
+# RUN apt-get install -y libraspberrypi0
+# RUN apt-get install -y libraspberrypi-dev
+# RUN apt-get install -y libraspberrypi-bin
+RUN apt-get install -y raspi-utils
+RUN apt-get install -y raspi-utils-core
 
 # video stuffs
 RUN apt-get install -y v4l-utils ffmpeg
