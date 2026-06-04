@@ -8,8 +8,8 @@ ARG ARCH=aarch64
 # [x] Iron (Short-term)         22.04 Jammy LTS
 # [x] Jazzy LTS	                24.04 Noble LTS
 # [x] Kilted (Short-term)       24.04 Noble LTS
-# [ ] Lyrical LTS               26.04 Resolute LTS
-# [ ] Rolling (Short-term)      24.04 Noble !! LTS
+# [x] Lyrical LTS               26.04 Resolute LTS
+# [x] Rolling (Short-term)      24.04 Noble !! LTS
 
 RUN echo "Building docker image with ROS_DISTRO=$ROS_DISTRO, ARCH="$ARCH
 
@@ -25,12 +25,16 @@ RUN apt-get install -y libavdevice-dev libavfilter-dev libopus-dev libvpx-dev pk
 
 RUN apt-get install -y python3-setuptools
 
-# raspi extras
-# RUN apt-get install -y libraspberrypi0
-# RUN apt-get install -y libraspberrypi-dev
-# RUN apt-get install -y libraspberrypi-bin
-RUN apt-get install -y raspi-utils
-RUN apt-get install -y raspi-utils-core
+# raspi extras, Resolute and on needs to use raspi-utils
+# TMP Rolling will also use raspi-utils when fully migrated to Resolute
+RUN if [ "$ROS_DISTRO" = "lyrical" ] || [ "$ROS_DISTRO" = "rolling_(enable_when_migrated)" ]; then \
+        apt-get install -y raspi-utils ; \
+        apt-get install -y raspi-utils-core ; \
+    else \
+        apt-get install -y libraspberrypi0 ; \
+        apt-get install -y libraspberrypi-dev ; \
+        apt-get install -y libraspberrypi-bin ; \
+    fi
 
 # video stuffs
 RUN apt-get install -y v4l-utils ffmpeg

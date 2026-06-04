@@ -252,7 +252,6 @@ EncoderLibAV::~EncoderLibAV() {
     av_packet_unref(this->encoded_packet);
     av_packet_free(&this->encoded_packet);
     
-    //avcodec_close(this->codec_context);
     if (this->codec_context)
         avcodec_free_context(&this->codec_context);
 }
