@@ -124,7 +124,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        ros_distro: [rolling, kilted, jazzy, iron, humble]
+        ros_distro: [rolling, lyrical, kilted, jazzy, iron, humble]
 
     steps:
     - name: Log in to Container Registry
