@@ -10,6 +10,8 @@ This package was designed to work with [Phantom Bridge](https://docs.phntm.io/br
 
 The node can handle multiple cameras connected to the same board at the same time via different CSI ports (such as the Compute Module 4 or Pi 5).
 
+The node can also capture individual camera still frames and save them to disk as PNG. Phantom Bridge UI automatically extracs these via the Agent and Bridge Server.
+
 ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Fhumble-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Firon-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Fjazzy-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Fkilted-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Flyrical-arm64.json) ![Endpoint Badge](https://img.shields.io/endpoint?url=https%3A%2F%2Fphantomcybernetics.github.io%2Fpicam_ros2%2Frolling-arm64.json)
 
 
@@ -108,6 +110,7 @@ services:
     volumes:
       - ~/picam_ros2_params.yaml:/ros2_ws/picam_ros2_params.yaml # config goes here
       - ~/picam_ros2_calibration:/calibration # calibration files are stored here
+      - ~/picam_frames:/camera_captures # saving PNG frames here
       - /tmp:/tmp
       - /run/udev:/run/udev:ro # cameras need this
     devices:
@@ -166,7 +169,6 @@ ROS_DISTRO=humble; docker build -f Dockerfile -t phntm/picam-ros2:$ROS_DISTRO --
 # All done, relaunch
 docker compose up picam_ros2
 ```
-
 
 ## Tested Hardware
 
