@@ -28,6 +28,8 @@
 #include "std_srvs/srv/set_bool.hpp"
 #include "std_srvs/srv/trigger.hpp"
 
+#include <mutex>
+
 class Encoder;
 
 using namespace libcamera;
@@ -156,9 +158,11 @@ class CameraInterface {
         void calibration_toggle(const std::shared_ptr<std_srvs::srv::SetBool::Request> request, std::shared_ptr<std_srvs::srv::SetBool::Response> response);
         void calibration_sample_frame(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response);
         void calibration_save(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response);
+        void save_frame(const std::shared_ptr<std_srvs::srv::Trigger::Request> request, std::shared_ptr<std_srvs::srv::Trigger::Response> response);
         std::shared_ptr<rclcpp::Service<std_srvs::srv::SetBool>> srv_calibration_toggle;
         std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> srv_calibration_sample_frame;
         std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> srv_calibration_save;
+        std::shared_ptr<rclcpp::Service<std_srvs::srv::Trigger>> srv_save_frame;
         uint calibration_frames_requested;
         uint calibration_frames_needed;
         long last_calibration_frame_taken_ns = 0;
@@ -168,6 +172,7 @@ class CameraInterface {
         float calibration_square_size;
         std::string calibration_files_base_path;
         std::string calibration_file;
+        std::string capture_files_base_path;
 
         StreamConfiguration *streamConfig;
         void readConfig();
@@ -177,4 +182,8 @@ class CameraInterface {
         // void frameRequestComplete(Request *request);
         void captureRequestComplete(Request *request);
         // int resetEncoder(const char* device_path);
+
+        std::mutex frame_save_mutex;
+        uint next_save_frame_request = 0;
+        std::map<uint, std::string> save_frame_requests;
 };

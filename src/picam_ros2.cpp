@@ -31,7 +31,8 @@ PicamROS2::PicamROS2(std::string node_name) : Node(node_name), count_(0)
     this->declare_parameter("calibration_frames_needed", 10);
     this->declare_parameter("calibration_pattern_size", std::vector<int>{ 9, 6 });
     this->declare_parameter("calibration_square_size_m", 0.019f);
-    this->declare_parameter("calibration_files", "/calibration/");
+    this->declare_parameter("calibration_files", "/calibration");
+    this->declare_parameter("capture_files", "/camera_captures");
 }
 
 void reloadUdevRules() {

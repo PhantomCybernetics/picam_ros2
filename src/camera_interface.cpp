@@ -6,6 +6,11 @@
 #include "picam_ros2/camera_interface.hpp"
 #include "picam_ros2/calibration.hpp"
 
+#include <chrono>
+#include <ctime>
+#include <string>
+#include <filesystem>
+
 using namespace libcamera;
 
 void freeBuffer(void* opaque, uint8_t* data) {
@@ -243,6 +248,9 @@ void CameraInterface::start() {
                                                                                         std::bind(&CameraInterface::calibration_save, this, std::placeholders::_1, std::placeholders::_2));
     }
 
+    this->srv_save_frame = this->node->create_service<std_srvs::srv::Trigger>(fmt::format("camera_{}/save_frame", this->location),
+                                                                              std::bind(&CameraInterface::save_frame, this, std::placeholders::_1, std::placeholders::_2));
+
     // std::shared_ptr<CameraInterface> sharedPtr(this, [](CameraInterface* ptr) {
     //     // Custom deleter that does nothing
     // });
@@ -266,6 +274,41 @@ void CameraInterface::start() {
 
     for (std::unique_ptr<Request> &request : this->capture_requests) {
         this->camera->queueRequest(request.get());
+    }
+}
+
+std::string makeCaptureFilename(std::string model, int location) {
+    auto now = std::chrono::system_clock::now();
+    auto t = std::chrono::system_clock::to_time_t(now);
+    
+    std::localtime(&t);              // fill tm_buf (or use localtime return directly)
+    std::tm* tm_ptr = std::localtime(&t);
+
+    char buf[64];
+    // Correct: buffer, size, format, tm*
+    std::strftime(buf, sizeof(buf), "%Y%m%d-%H%M%S", tm_ptr);
+
+    char filename[128];
+    std::snprintf(filename, sizeof(filename), "%s-%d_%s.png", model.c_str(), location, buf);
+    return std::string(filename);
+}
+
+std::string savePNG(const cv::Mat& frame_mat, const std::string fname, const std::string& dir) {
+    std::filesystem::path dir_path(dir);
+    std::error_code ec;
+    if (!std::filesystem::exists(dir_path, ec) || ec) {
+        if (!std::filesystem::create_directories(dir_path, ec)) {
+            return "";
+        }
+    } else if (!std::filesystem::is_directory(dir_path, ec)) {
+        return "";
+    }
+
+    std::filesystem::path full_path = dir_path / fname;
+    if (cv::imwrite(full_path.string(), frame_mat)) {  // overwrite if the file already exists
+        return full_path;
+    } else {
+        return ""; // err
     }
 }
 
@@ -373,6 +416,7 @@ void CameraInterface::captureRequestComplete(Request *request) {
             this->calibration_frames.push_back(yuv420ToMonoCopy(plane_buffers, plane_strides, this->width, this->height));
             //cv::imwrite(fmt::format("/ros2_ws/img_snaps/frame_mono_{}.png", ns_since_epoch), this->calibration_frames.back());
 
+            // process calibration frames
             if (this->calibration_frames.size() == this->calibration_frames_needed) {
                 RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sProcessing calibration  for %s at location %d%s", MAGENTA.c_str(), this->model.c_str(), this->location, CLR.c_str());
                 calibrateCamera(this->calibration_frames, this->calibration_pattern_size, this->calibration_square_size, this->out_info_msg);
@@ -382,6 +426,26 @@ void CameraInterface::captureRequestComplete(Request *request) {
                 this->lines_printed = -1;
             }
         }
+
+        this->frame_save_mutex.lock(); 
+        for (const auto& [req_key, res] : this->save_frame_requests) {
+            // std::cout << key << " -> " << value << "\n";
+            if (res.empty()) {
+                RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sSaving frame from %s at location %d%s", GREEN.c_str(), this->model.c_str(), this->location, CLR.c_str());
+                this->lines_printed = -1;
+
+                auto frame_mat = yuv420ToRgbCopy(plane_buffers, plane_strides, this->width, this->height);
+
+                std::string fname = makeCaptureFilename(this->model, this->location);
+                auto written_path = savePNG(frame_mat, fname, this->capture_files_base_path);
+
+                if (!written_path.empty())
+                    this->save_frame_requests[req_key] = "file://" + written_path;
+                else
+                    this->save_frame_requests[req_key] = "ERROR";
+            }
+        }
+        this->frame_save_mutex.unlock(); 
     }
 
     if (!this->running)
@@ -616,6 +680,11 @@ void CameraInterface::readConfig() {
     }
     this->calibration_file = fmt::format("{}{}-{}.json", this->calibration_files_base_path, this->model, this->location);
 
+    this->capture_files_base_path = this->node->get_parameter("capture_files").as_string();
+    if (!this->capture_files_base_path.empty() && this->capture_files_base_path.back() != '/') {
+        this->capture_files_base_path += '/';
+    }
+
     this->node->declare_parameter(config_prefix + "hflip", false);
     this->node->declare_parameter(config_prefix + "vflip", false);
     this->hflip = this->node->get_parameter(config_prefix + "hflip").as_bool();
@@ -752,6 +821,37 @@ void CameraInterface::calibration_sample_frame(const std::shared_ptr<std_srvs::s
     if (this->calibration_frames_requested == this->calibration_frames_needed) {
         response->message = fmt::format("Captured {} frames, processing calibration...", this->calibration_frames_requested);
     }
+}
+
+void CameraInterface::save_frame(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
+                                               std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
+    
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sSaving frame for %s at location %d%s", CYAN.c_str(), this->model.c_str(), this->location, CLR.c_str());
+    this->lines_printed = -1;
+    
+    auto frame_request_id = ++this->next_save_frame_request;
+    
+    this->frame_save_mutex.lock();   
+    this->save_frame_requests.emplace(frame_request_id, "");
+    while (this->save_frame_requests.at(frame_request_id).empty()) {
+        this->frame_save_mutex.unlock();   
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        this->frame_save_mutex.lock();   
+    }
+    auto res = this->save_frame_requests.at(frame_request_id);
+    this->save_frame_requests.erase(frame_request_id);
+    this->frame_save_mutex.unlock();   
+
+    if (res != "ERROR") {
+        response->success = true;
+        response->message = res;
+    } else {
+        response->success = false;
+        response->message = "Error capturing frame";
+    }
+
+    RCLCPP_INFO(rclcpp::get_logger("rclcpp"), "%sSaving frame for %s at location %d result: %s%s", CYAN.c_str(), this->model.c_str(), this->location, res.c_str(), CLR.c_str());
+    this->lines_printed = -1;
 }
 
 void CameraInterface::calibration_save(const std::shared_ptr<std_srvs::srv::Trigger::Request>,
